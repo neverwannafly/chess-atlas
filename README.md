@@ -1,112 +1,69 @@
 # Chess Atlas
 
-A modern web application to discover and explore chess tournaments across India. Data is sourced from [AICF](https://aicf.in/all-events/).
+A fast, filterable directory of every AICF-registered chess tournament in India.
+Event listings are scraped from [aicf.in/all-events](https://aicf.in/all-events/); prize funds,
+time controls, schedules, venues and contacts are extracted from each brochure PDF by an
+LLM worker running on [Antigravity](https://antigravity.google) (`agy`).
 
-## Features
-
-- **Live Event Directory**: Browse all AICF-registered chess tournaments
-- **Smart Filtering**: Filter by state, time control, date range
-- **PDF Parsing**: Automatically extracts prize money, rounds, and other details from brochures using AI
-- **Dark/Light Theme**: Professional UI with theme toggle
-- **Responsive Design**: Works on desktop, tablet, and mobile
-
-## Project Structure
+## Architecture
 
 ```
-chessatlas/
-├── backend/          # Node.js + Express API
-│   ├── src/
-│   │   ├── db/       # SQLite database layer
-│   │   ├── routes/   # API endpoints
-│   │   ├── services/ # Scraper & PDF parser
-│   │   └── types/    # TypeScript types
-│   └── data/         # SQLite database file
-└── frontend/         # React + Vite + shadcn/ui
-    └── src/
-        ├── components/
-        ├── hooks/
-        └── lib/
+AICF /all-events/ ──scrape (cron 6h)──▶ backend: Express + SQLite (FTS5) ◀──REST── frontend: React SPA
+                                             ▲            │
+                       PUT extraction JSON   │            │  GET /api/admin/extraction-queue
+                                             │            ▼
+                                  extraction worker (runs anywhere `agy` is installed)
+                                  PDF → text (or OCR for scanned PDFs) → agy --json-schema → zod
 ```
 
-## Setup
+- One container: the backend serves the built SPA and `/api/*`. See `Dockerfile`.
+- The API and data shapes are specified in [`docs/CONTRACT.md`](docs/CONTRACT.md).
 
-### Prerequisites
+```
+backend/src/
+  db/           migrations + queries (SQLite, WAL, FTS5)
+  services/     AICF scraper
+  lib/          place (city/state) + date normalisation, ICS, HTTP helpers
+  routes/       public + admin API
+  extraction/   Antigravity brochure-extraction worker (schema, prompt, pdf, worker)
+frontend/src/
+  pages/        Discover, Event detail, Stats, 404
+  components/   filter bar, cards/list/calendar views, UI primitives
+  lib/          typed API client, formatting, URL-backed filters
+```
 
-- Node.js 18+
-- npm or pnpm
+## Development
 
-### Backend
+Requires Node 22+.
+
+```bash
+# backend (http://localhost:8080)
+cd backend && npm install
+ADMIN_TOKEN=dev npm run dev       # migrates DB, scrapes on boot if stale
+npm test                          # place/date parsing tests
+
+# frontend (http://localhost:5173, proxies /api → :8080)
+cd frontend && npm install && npm run dev
+VITE_MOCK=1 npm run dev           # run against built-in fixtures, no backend needed
+```
+
+## Brochure extraction
 
 ```bash
 cd backend
-npm install
-
-# Set environment variables
-export OPENAI_API_KEY=your_key_here
-
-# Run initial scrape
-npm run scrape
-
-# Start the server
-npm run dev
+CHESSATLAS_API_URL=http://localhost:8080 ADMIN_TOKEN=dev npm run extract -- --limit 50 --concurrency 4
+npm run extract -- --url <pdf-url>    # dry-run a single brochure, prints JSON
 ```
 
-### Frontend
+Results are cached by PDF hash in `backend/data/extraction-cache/`, so re-running against a
+different backend (e.g. production) does not re-invoke the model. See
+[`backend/src/extraction/README.md`](backend/src/extraction/README.md).
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Environment
 
-The frontend runs on `http://localhost:5173` and proxies API requests to the backend on port 3001.
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/events` | Get all events (supports filters) |
-| GET | `/api/events/:eventCode` | Get single event |
-| GET | `/api/events/filters` | Get available filter options |
-| GET | `/api/events/stats` | Get event statistics |
-| POST | `/api/scrape` | Trigger manual scrape |
-| POST | `/api/parse-pdfs` | Trigger PDF parsing |
-
-### Query Parameters for `/api/events`
-
-- `state` - Filter by state
-- `city` - Filter by city
-- `timeControl` - Filter by time control (Classical/Rapid/Blitz)
-- `startDateFrom` - Filter events starting from date
-- `startDateTo` - Filter events starting until date
-- `search` - Full-text search on name, city, state
-
-## Scheduled Jobs
-
-The backend runs automated jobs:
-- **Scraping**: Every 6 hours
-- **PDF Parsing**: Every 12 hours
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `PORT` | Backend port (default: 3001) |
-| `OPENAI_API_KEY` | OpenAI API key for PDF parsing |
-
-## Tech Stack
-
-**Backend:**
-- Node.js + Express
-- TypeScript
-- SQLite (better-sqlite3)
-- Cheerio (web scraping)
-- OpenAI API (PDF parsing)
-
-**Frontend:**
-- React 18
-- Vite
-- Tailwind CSS
-- shadcn/ui components
-- TanStack Query
-- Lucide icons
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | HTTP port |
+| `DATA_DIR` | `backend/data` | SQLite location (`/data` in Docker) |
+| `ADMIN_TOKEN` | — | Bearer token for `/api/admin/*` (admin routes return 503 when unset) |
+| `ADMIN_RATE_LIMIT` | `120` | Admin requests per minute per IP |

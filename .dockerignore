@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+/data
+/backend/data
+**/.env
+**/.env.*
+.git
+.gitignore
+docs
+*.md
+**/*.db
+**/*.db-*
+**/*.back

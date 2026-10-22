@@ -1,35 +1,30 @@
-import express from "express";
-import cors from "cors";
+import "dotenv/config";
 import cron from "node-cron";
-import eventsRouter from "./routes/events.js";
-import { runPipeline } from "./services/pipeline.js";
+import { createApp } from "./app.js";
+import db from "./db/database.js";
+import { getMeta } from "./db/events.js";
+import { runScrape } from "./services/scraper.js";
 
-import dotenv from "dotenv";
-dotenv.config();
+const PORT = Number(process.env.PORT) || 8080;
+const SIX_HOURS = 6 * 3600_000;
 
+const app = createApp();
+const server = app.listen(PORT, () => console.log(`Chess Atlas listening on http://localhost:${PORT}`));
 
-const app = express();
-const PORT = process.env.PORT || 3001;
+const scrape = (why: string) =>
+  runScrape().catch((err) => console.error(`[cron] ${why} scrape failed:`, (err as Error).message));
 
-app.use(cors());
-app.use(express.json());
+cron.schedule("0 */6 * * *", () => void scrape("scheduled"));
 
-app.use("/api/events", eventsRouter);
+const last = getMeta("lastScrapeAt");
+if (!last || Date.now() - new Date(last).getTime() > SIX_HOURS) void scrape("boot");
 
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// Schedule pipeline to run every 6 hours
-cron.schedule("0 */6 * * *", async () => {
-  console.log("\n⏰ Running scheduled pipeline...\n");
-  try {
-    await runPipeline({ scrape: true, parsePdfs: true });
-  } catch (error) {
-    console.error("Scheduled pipeline failed:", error);
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Chess Atlas API running on http://localhost:${PORT}`);
-});
+function shutdown() {
+  server.close(() => {
+    db.close();
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

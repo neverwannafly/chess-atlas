@@ -6,26 +6,35 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "scrape": "tsx src/scripts/scrape.ts"
+    "scrape": "tsx src/scripts/scrape.ts",
+    "extract": "tsx src/extraction/worker.ts",
+    "test": "tsx --test src/lib/*.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
     "cheerio": "^1.0.0",
+    "compression": "^1.8.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "helmet": "^8.3.0",
     "node-cron": "^3.0.3",
-    "openai": "^4.77.0",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
+    "@types/express": "^4.17.25",
     "@types/node": "^22.10.5",
     "@types/node-cron": "^3.0.11",
-    "@types/pdf-parse": "^1.1.4",
+    "@types/pdf-parse": "^1.1.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

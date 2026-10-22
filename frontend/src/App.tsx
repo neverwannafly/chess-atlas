@@ -1,60 +1,43 @@
-import { useState } from "react";
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Header } from "@/components/Header";
-import { Filters } from "@/components/Filters";
-import { EventsTable } from "@/components/EventsTable";
-import { EventDetail } from "@/components/EventDetail";
-import { useEvents, useStats } from "@/hooks/useEvents";
-import type { ChessEvent, EventFilters } from "@/types/event";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { Layout } from "@/components/Layout";
+import DiscoverPage from "@/pages/DiscoverPage";
+import NotFoundPage from "@/pages/NotFoundPage";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const queryClient = new QueryClient();
+const EventPage = lazy(() => import("@/pages/EventPage"));
+const StatsPage = lazy(() => import("@/pages/StatsPage"));
 
-function EventsPage() {
-  const [filters, setFilters] = useState<EventFilters>({ status: "upcoming" });
-  const [selectedEvent, setSelectedEvent] = useState<ChessEvent | null>(null);
-  const { data, isLoading } = useEvents(filters);
-  const { data: stats } = useStats();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+});
 
-  return (
-    <div className="h-screen flex flex-col">
-      <Header />
+const fallback = (
+  <div className="mx-auto max-w-6xl space-y-4 px-4 py-10" role="status" aria-label="Loading">
+    <Skeleton className="h-10 w-2/3" />
+    <Skeleton className="h-6 w-1/3" />
+    <Skeleton className="h-64 w-full" />
+  </div>
+);
+const lazyEl = (el: React.ReactNode) => <Suspense fallback={fallback}>{el}</Suspense>;
 
-      <div className="flex-1 flex flex-col min-h-0 px-4 pb-3">
-        <Filters filters={filters} onChange={setFilters} />
-
-        {/* Stats */}
-        <div className="flex items-center justify-between py-2 text-xs text-muted-foreground shrink-0">
-          <span>
-            <span className="font-semibold text-foreground">{data?.count ?? 0}</span> tournaments
-          </span>
-          {stats && (
-            <span>
-              {stats.upcoming} upcoming · {stats.ongoing} live · {stats.total} total
-            </span>
-          )}
-        </div>
-
-        {/* Table - fills remaining space */}
-        <EventsTable
-          events={data?.data ?? []}
-          isLoading={isLoading}
-          onEventClick={setSelectedEvent}
-        />
-      </div>
-
-      <EventDetail
-        event={selectedEvent}
-        open={!!selectedEvent}
-        onClose={() => setSelectedEvent(null)}
-      />
-    </div>
-  );
-}
+const router = createBrowserRouter([
+  {
+    element: <Layout />,
+    children: [
+      { index: true, element: <DiscoverPage /> },
+      { path: "events/:eventCode", element: lazyEl(<EventPage />) },
+      { path: "stats", element: lazyEl(<StatsPage />) },
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
+]);
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <EventsPage />
+      <RouterProvider router={router} />
     </QueryClientProvider>
   );
 }

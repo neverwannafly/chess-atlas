@@ -1,0 +1,405 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tagline": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "One line, max 120 chars"
+    },
+    "venue": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "city": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pincode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mapQuery": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "address",
+        "city",
+        "state",
+        "pincode",
+        "mapQuery"
+      ],
+      "additionalProperties": false
+    },
+    "timeControl": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Classical",
+            "Rapid",
+            "Blitz",
+            "Mixed"
+          ]
+        },
+        "baseMinutes": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "incrementSeconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "baseMinutes",
+        "incrementSeconds",
+        "raw"
+      ],
+      "additionalProperties": false
+    },
+    "rounds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "fideRated": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "format": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prizes": {
+      "type": "object",
+      "properties": {
+        "totalInr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Whole rupees as an integer (lakh notation converted); null if unknown"
+        },
+        "places": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "amountInr": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "description": "Whole rupees as an integer (lakh notation converted); null if unknown"
+              },
+              "extra": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "amountInr",
+              "extra"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "categoryPrizes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "amountInr": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "description": "Whole rupees as an integer (lakh notation converted); null if unknown"
+              }
+            },
+            "required": [
+              "category",
+              "label",
+              "amountInr"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "totalInr",
+        "places",
+        "categoryPrizes",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "entryFees": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "amountInr": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Whole rupees as an integer (lakh notation converted); null if unknown"
+          }
+        },
+        "required": [
+          "category",
+          "amountInr"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "categories": {
+      "type": "object",
+      "properties": {
+        "rating": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "age": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "rating",
+        "age"
+      ],
+      "additionalProperties": false
+    },
+    "eligibility": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "registration": {
+      "type": "object",
+      "properties": {
+        "link": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deadline": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "YYYY-MM-DD"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "link",
+        "deadline",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "organizer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "chiefArbiter": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "phone",
+          "email"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "accommodation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schedule": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD"
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "time",
+          "item"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "tagline",
+    "venue",
+    "timeControl",
+    "rounds",
+    "fideRated",
+    "format",
+    "prizes",
+    "entryFees",
+    "categories",
+    "eligibility",
+    "registration",
+    "organizer",
+    "chiefArbiter",
+    "contacts",
+    "accommodation",
+    "schedule"
+  ],
+  "additionalProperties": false
+}
