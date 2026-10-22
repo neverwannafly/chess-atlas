@@ -88,7 +88,8 @@ export async function extractText(bytes: Buffer): Promise<{ text: string; pages:
   console.log = () => {};
   try {
     const out = await pdfParse(bytes);
-    const text = out.text.replace(/[ \t ]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    // strip control chars (NUL etc. from odd font encodings): they can't be passed in argv to agy
+    const text = out.text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").replace(/[ \t ]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
     return { text, pages: out.numpages };
   } catch (e) {
     throw new PdfError(`pdf parse error: ${(e as Error).message}`);

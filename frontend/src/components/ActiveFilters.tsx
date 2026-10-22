@@ -10,7 +10,7 @@ export function ActiveFilters({ f, update, clear }: { f: Filters; update: (p: Pa
   for (const t of f.timeControl) pills.push({ key: `t${t}`, text: t, remove: () => update({ timeControl: f.timeControl.filter((x) => x !== t) }) });
   if (f.from || f.to) {
     const p = activePreset(f);
-    const text = p === "weekend" ? "This weekend" : p === "30days" ? "Next 30 days" : `${f.from ? formatDate(f.from) : "…"} → ${f.to ? formatDate(f.to) : "…"}`;
+    const text = p === "weekend" ? "This weekend" : p === "30days" ? "Next 30 days" : `${f.from ? formatDate(f.from) : "…"} to ${f.to ? formatDate(f.to) : "…"}`;
     pills.push({ key: "d", text, remove: () => update({ from: undefined, to: undefined }) });
   }
   if (f.minPrize) pills.push({ key: "p", text: prizeLabel(f.minPrize), remove: () => update({ minPrize: undefined }) });
@@ -21,7 +21,7 @@ export function ActiveFilters({ f, update, clear }: { f: Filters; update: (p: Pa
   return (
     <div className="flex flex-wrap items-center gap-1.5" aria-label="Active filters" role="group">
       {pills.map((p) => (
-        <button key={p.key} type="button" onClick={p.remove} aria-label={`Remove filter ${p.text}`} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-accent-soft py-1 pl-3 pr-2 text-[13px] font-medium capitalize text-accent hover:opacity-80">
+        <button key={p.key} type="button" onClick={p.remove} aria-label={`Remove filter ${p.text}`} className="inline-flex cursor-pointer items-center gap-1 rounded bg-accent-soft py-1.5 pl-3 pr-2 text-[13px] font-semibold capitalize text-accent hover:opacity-80">
           {p.text} <X className="h-3.5 w-3.5" aria-hidden />
         </button>
       ))}

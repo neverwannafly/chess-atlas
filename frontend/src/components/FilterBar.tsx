@@ -15,7 +15,7 @@ interface Props {
   update: (p: Partial<Filters>) => void;
 }
 
-const selectCls = "h-10 cursor-pointer rounded-md border border-line bg-surface px-2.5 text-sm";
+const selectCls = "h-10 cursor-pointer rounded-md border-2 border-ink/15 bg-surface px-2.5 text-sm font-medium";
 const label = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 export function FilterBar({ filters: f, update }: Props) {
@@ -59,16 +59,16 @@ export function FilterBar({ filters: f, update }: Props) {
             onClick={() => setOpen(!open)}
             aria-expanded={open}
             aria-controls="more-filters"
-            className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm font-medium hover:bg-sunk lg:hidden"
+            className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border-2 border-ink/15 bg-surface px-3 text-sm font-semibold hover:border-accent lg:hidden"
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden /> Filters
-            {advancedCount > 0 && <span className="rounded-full bg-accent px-1.5 text-xs text-accent-ink">{advancedCount}</span>}
+            {advancedCount > 0 && <span className="rounded bg-accent px-1.5 text-xs text-accent-ink">{advancedCount}</span>}
           </button>
           <label className="sr-only" htmlFor="sort">Sort by</label>
           <select id="sort" className={selectCls} value={f.sort} onChange={(e) => update({ sort: e.target.value })}>
             {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-          <div role="group" aria-label="View" className="flex rounded-md border border-line bg-surface p-0.5">
+          <div role="group" aria-label="View" className="flex rounded-md border-2 border-ink/15 bg-surface p-0.5">
             {views.map(({ v, icon: Icon, text }) => (
               <button
                 key={v}
@@ -86,7 +86,7 @@ export function FilterBar({ filters: f, update }: Props) {
         </div>
       </div>
 
-      <div id="more-filters" className={cn("space-y-3 rounded-xl border border-line bg-surface/60 p-3 lg:block", open ? "block" : "hidden")}>
+      <div id="more-filters" className={cn("space-y-3 rounded-lg border-2 border-dashed border-ink/15 p-3 lg:block", open ? "block" : "hidden")}>
         <div className="flex flex-wrap items-center gap-2">
           <MultiSelect label="State" options={facets?.states ?? []} selected={f.state} onChange={(state) => update({ state })} />
           <MultiSelect label="City" options={facets?.cities ?? []} selected={f.city} onChange={(city) => update({ city })} />

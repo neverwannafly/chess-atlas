@@ -23,13 +23,13 @@ export function MultiSelect({ label, options, selected, onChange, searchPlacehol
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className={cn(
-          "inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border bg-surface px-3 text-sm font-medium hover:bg-sunk",
-          selected.length ? "border-accent text-accent" : "border-line"
+          "inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border-2 bg-surface px-3 text-sm font-semibold hover:border-accent",
+          selected.length ? "border-accent text-accent" : "border-ink/15"
         )}
         aria-label={`${label}${selected.length ? `, ${selected.length} selected` : ""}`}
       >
         {label}
-        {selected.length > 0 && <span className="rounded-full bg-accent px-1.5 text-xs text-accent-ink">{selected.length}</span>}
+        {selected.length > 0 && <span className="rounded bg-accent px-1.5 text-xs text-accent-ink">{selected.length}</span>}
         <ChevronDown className="h-4 w-4 opacity-60" aria-hidden />
       </PopoverTrigger>
       <PopoverContent className="p-0">

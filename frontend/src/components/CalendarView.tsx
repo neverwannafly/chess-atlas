@@ -48,7 +48,7 @@ export function CalendarView({ filters, update }: { filters: Filters; update: (p
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-2xl font-semibold" aria-live="polite">{formatMonthLabel(month)}</h2>
+        <h2 className="font-display text-3xl font-extrabold" aria-live="polite">{formatMonthLabel(month)}</h2>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="icon" aria-label="Previous month" onClick={() => update({ month: shiftMonth(month, -1) })}><ChevronLeft className="h-4 w-4" /></Button>
           <Button variant="outline" size="sm" className="h-10" onClick={() => update({ month: undefined })}>Today</Button>
@@ -61,8 +61,8 @@ export function CalendarView({ filters, update }: { filters: Filters; update: (p
         <CardSkeletons n={2} />
       ) : (
         <div className={cn(isPlaceholderData && "opacity-60 transition-opacity")}>
-          <div role="grid" aria-label={formatMonthLabel(month)} className="overflow-hidden rounded-xl border border-line bg-surface">
-            <div role="row" className="grid grid-cols-7 border-b border-line bg-sunk text-center text-[11px] font-semibold uppercase tracking-wider text-muted">
+          <div role="grid" aria-label={formatMonthLabel(month)} className="overflow-hidden rounded-lg border-2 border-ink/20 bg-surface">
+            <div role="row" className="grid grid-cols-7 border-b border-line bg-sunk text-center text-[13px] font-bold text-muted">
               {DOW.map((d) => <div key={d} role="columnheader" className="py-2">{d}</div>)}
             </div>
             <div className="grid grid-cols-7">
@@ -78,11 +78,11 @@ export function CalendarView({ filters, update }: { filters: Filters; update: (p
                     aria-selected={isSel}
                     aria-label={`${formatWeekday(d)}, ${evs.length} tournaments`}
                     onClick={() => setPicked(d)}
-                    className={cn("flex min-h-14 cursor-pointer flex-col items-start gap-0.5 border-b border-r border-line p-1 text-left sm:min-h-24 sm:p-1.5", isSel ? "bg-accent-soft" : "hover:bg-sunk/60")}
+                    className={cn("flex min-h-14 cursor-pointer flex-col items-start gap-0.5 border-b border-r border-line p-1 text-left sm:min-h-24 sm:p-1.5", isSel ? "bg-accent-soft ring-2 ring-inset ring-accent" : "hover:bg-sunk/60")}
                   >
-                    <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold", d === today && "bg-accent text-accent-ink")}>{+d.slice(8)}</span>
+                    <span className={cn("flex h-6 w-6 items-center justify-center rounded text-xs font-bold", d === today && "bg-accent text-accent-ink")}>{+d.slice(8)}</span>
                     <span className="hidden w-full flex-col gap-0.5 sm:flex">
-                      {evs.slice(0, 2).map((e) => <span key={e.eventCode} className="truncate rounded bg-accent/15 px-1 text-[11px] font-medium text-accent">{e.name}</span>)}
+                      {evs.slice(0, 2).map((e) => <span key={e.eventCode} className="truncate rounded bg-accent px-1 text-[11px] font-semibold text-accent-ink">{e.name}</span>)}
                       {evs.length > 2 && <span className="px-1 text-[11px] text-muted">+{evs.length - 2} more</span>}
                     </span>
                     {evs.length > 0 && <span className="mt-auto flex gap-0.5 sm:hidden">{evs.slice(0, 3).map((e) => <span key={e.eventCode} className="h-1.5 w-1.5 rounded-full bg-accent" />)}</span>}
@@ -92,9 +92,9 @@ export function CalendarView({ filters, update }: { filters: Filters; update: (p
             </div>
           </div>
           <section className="mt-5" aria-label={`Tournaments on ${formatWeekday(selected)}`}>
-            <h3 className="mb-3 text-lg font-semibold">{formatWeekday(selected)}</h3>
+            <h3 className="mb-3 font-display text-2xl font-bold">{formatWeekday(selected)}</h3>
             {dayEvents.length ? (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{dayEvents.map((e) => <EventCard key={e.eventCode} e={e} />)}</div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{dayEvents.map((e, i) => <EventCard key={e.eventCode} e={e} index={i} />)}</div>
             ) : (
               <p className="text-muted">No tournaments on this day. <button type="button" className="cursor-pointer text-accent underline" onClick={() => update({ view: "list" })}>Switch to list view</button> to browse everything.</p>
             )}

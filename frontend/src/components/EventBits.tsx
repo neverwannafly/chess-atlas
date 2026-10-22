@@ -11,7 +11,7 @@ export function Pill({ children, tone = "neutral", className, title }: { childre
     brass: "bg-brass-soft text-brass",
   };
   return (
-    <span title={title} className={cn("inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", tones[tone], className)}>
+    <span title={title} className={cn("inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 text-xs font-bold", tones[tone], className)}>
       {children}
     </span>
   );
