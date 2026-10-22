@@ -37,7 +37,7 @@ function rateLimit(req: Request, res: Response, next: NextFunction) {
 }
 
 function auth(req: Request, _res: Response, next: NextFunction) {
-  const token = process.env.ADMIN_TOKEN;
+  const token = process.env.ADMIN_TOKEN || process.env.CHESSATLAS_ADMIN_TOKEN;
   if (!token) return next(new ApiError(503, "ADMIN_DISABLED", "Admin API is disabled (ADMIN_TOKEN not set)"));
   const m = /^Bearer (.+)$/i.exec(req.get("authorization") ?? "");
   if (!m || !safeEqual(m[1], token)) return next(new ApiError(401, "UNAUTHORIZED", "Invalid or missing bearer token"));

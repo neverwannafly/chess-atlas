@@ -42,7 +42,7 @@ export default function StatsPage() {
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[
               [String(s.upcoming), "upcoming"], [String(s.ongoing), "ongoing now"],
-              [formatInr(s.upcomingPrizePoolInr), "prize pool ahead", formatInrFull(s.upcomingPrizePoolInr)],
+              [formatInr(s.upcomingPrizePoolInr || null), "prize pool ahead", s.upcomingPrizePoolInr ? formatInrFull(s.upcomingPrizePoolInr) : undefined],
               [`${s.extracted}/${s.total}`, "with parsed details"],
             ].map(([v, l, t]) => (
               <div key={l} className="rounded-xl border border-line bg-surface p-4">

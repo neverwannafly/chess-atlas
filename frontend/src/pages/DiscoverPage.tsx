@@ -58,7 +58,7 @@ function Hero({ q, setQ }: { q: string; setQ: (v: string) => void }) {
           {s ? (
             <>
               <Stat value={String(s.upcoming + s.ongoing)} label="tournaments ahead" />
-              <Stat value={formatInr(s.upcomingPrizePoolInr)} label="in prize money" title={formatInrFull(s.upcomingPrizePoolInr)} />
+              <Stat value={formatInr(s.upcomingPrizePoolInr || null)} label="in prize money" title={s.upcomingPrizePoolInr ? formatInrFull(s.upcomingPrizePoolInr) : undefined} />
               <Stat value={String(s.startingThisWeek)} label="starting this week" />
             </>
           ) : (
