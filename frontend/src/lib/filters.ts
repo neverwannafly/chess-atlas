@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { EventQuery } from "@/lib/api";
 import { addDays, formatInr, todayIST } from "@/lib/format";
 
-export type ViewMode = "cards" | "list" | "calendar";
+export type ViewMode = "cards" | "calendar";
 export const STATUSES = ["upcoming", "ongoing", "past"] as const;
 export const DEFAULT_STATUS = ["upcoming", "ongoing"];
 export const TIME_CONTROLS = ["Classical", "Rapid", "Blitz", "Mixed"];
@@ -28,9 +28,13 @@ export interface Filters {
   minPrize?: number;
   maxFee?: number;
   fide: boolean;
+  /** Client-side: only events whose registration is still open. */
+  regOpen: boolean;
   sort: string;
   view: ViewMode;
   month?: string; // YYYY-MM, calendar view
+  /** Event code shown in the quick-view drawer. */
+  event?: string;
 }
 
 const list = (v: string | null) => (v ? v.split(",").filter(Boolean) : []);
@@ -54,9 +58,11 @@ export function parseFilters(sp: URLSearchParams): Filters {
     minPrize: num(sp.get("minPrize")),
     maxFee: num(sp.get("maxFee")),
     fide: sp.get("fide") === "1",
+    regOpen: sp.get("open") === "1",
     sort: SORTS.some((s) => s.value === sp.get("sort")) ? sp.get("sort")! : "startDate",
-    view: view === "list" || view === "calendar" ? view : "cards",
+    view: view === "calendar" ? view : "cards",
     month: month && /^\d{4}-\d{2}$/.test(month) ? month : undefined,
+    event: /^[\w\-.]{1,40}$/.test(sp.get("event") ?? "") ? sp.get("event")! : undefined,
   };
 }
 
@@ -72,9 +78,11 @@ export function serialize(f: Filters): URLSearchParams {
   if (f.minPrize) p.set("minPrize", String(f.minPrize));
   if (f.maxFee) p.set("maxFee", String(f.maxFee));
   if (f.fide) p.set("fide", "1");
+  if (f.regOpen) p.set("open", "1");
   if (f.sort !== "startDate") p.set("sort", f.sort);
   if (f.view !== "cards") p.set("view", f.view);
   if (f.month) p.set("month", f.month);
+  if (f.event) p.set("event", f.event);
   return p;
 }
 
@@ -136,8 +144,8 @@ export function activePreset(f: Filters): Preset | null {
 }
 
 export function hasActiveFilters(f: Filters) {
-  return !!(f.q || f.status.length || f.state.length || f.city.length || f.timeControl.length || f.from || f.to || f.minPrize || f.maxFee || f.fide);
+  return !!(f.q || f.status.length || f.state.length || f.city.length || f.timeControl.length || f.from || f.to || f.minPrize || f.maxFee || f.fide || f.regOpen);
 }
 
-export const prizeLabel = (n: number) => `${formatInr(n)}+ prize`;
-export const feeLabel = (n: number) => `Fee up to ${formatInr(n)}`;
+export const prizeLabel = (n: number) => `Prize ${formatInr(n)}+`;
+export const feeLabel = (n: number) => `Entry ≤ ${formatInr(n)}`;

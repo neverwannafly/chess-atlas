@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CardSkeletons, ErrorState } from "@/components/States";
-import { EventCard } from "@/components/EventCard";
+import { ErrorState } from "@/components/States";
+import { EventRow } from "@/components/event/EventRow";
 import { useEventsPage } from "@/hooks/queries";
+import { displayName } from "@/lib/eventFacts";
 import { toQuery, type Filters } from "@/lib/filters";
-import { addDays, formatMonthLabel, formatWeekday, todayIST } from "@/lib/format";
+import { addDays, formatMonthLabel, formatWeekday, pluralize, todayIST } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -16,7 +17,7 @@ function shiftMonth(ym: string, delta: number) {
   return d.toISOString().slice(0, 7);
 }
 
-export function CalendarView({ filters, update }: { filters: Filters; update: (p: Partial<Filters>) => void }) {
+export function CalendarView({ filters, update, onOpen }: { filters: Filters; update: (p: Partial<Filters>) => void; onOpen: (code: string) => void }) {
   const today = todayIST();
   const month = filters.month ?? today.slice(0, 7);
   const first = `${month}-01`;
@@ -43,60 +44,82 @@ export function CalendarView({ filters, update }: { filters: Filters; update: (p
   }, [data, first, last]);
 
   const cells: (string | null)[] = [...Array(lead).fill(null), ...Array.from({ length: lastDay }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`)];
+  while (cells.length % 7) cells.push(null);
   const dayEvents = byDay.get(selected) ?? [];
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-3xl font-extrabold" aria-live="polite">{formatMonthLabel(month)}</h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-[17px] font-semibold tracking-h3" aria-live="polite">
+          {formatMonthLabel(month)}
+          {data && <span className="ml-2 text-small font-normal text-muted">{pluralize(data.meta.total, "tournament")}</span>}
+        </h2>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" aria-label="Previous month" onClick={() => update({ month: shiftMonth(month, -1) })}><ChevronLeft className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" className="h-10" onClick={() => update({ month: undefined })}>Today</Button>
-          <Button variant="outline" size="icon" aria-label="Next month" onClick={() => update({ month: shiftMonth(month, 1) })}><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="secondary" size="icon" aria-label="Previous month" onClick={() => update({ month: shiftMonth(month, -1) })}><ChevronLeft aria-hidden /></Button>
+          <Button variant="secondary" onClick={() => update({ month: undefined })}>Today</Button>
+          <Button variant="secondary" size="icon" aria-label="Next month" onClick={() => update({ month: shiftMonth(month, 1) })}><ChevronRight aria-hidden /></Button>
         </div>
       </div>
       {isError ? (
         <ErrorState message={(error as Error).message} onRetry={() => refetch()} />
       ) : isPending ? (
-        <CardSkeletons n={2} />
+        <div className="skeleton h-96 w-full rounded-md" aria-hidden />
       ) : (
-        <div className={cn(isPlaceholderData && "opacity-60 transition-opacity")}>
-          <div role="grid" aria-label={formatMonthLabel(month)} className="overflow-hidden rounded-lg border-2 border-ink/20 bg-surface">
-            <div role="row" className="grid grid-cols-7 border-b border-line bg-sunk text-center text-[13px] font-bold text-muted">
-              {DOW.map((d) => <div key={d} role="columnheader" className="py-2">{d}</div>)}
+        <div className={cn("transition-opacity", isPlaceholderData && "opacity-60")}>
+          <div role="grid" aria-label={formatMonthLabel(month)} className="overflow-hidden rounded-md border border-border bg-surface">
+            <div role="row" className="grid grid-cols-7 border-b border-border">
+              {DOW.map((d) => <div key={d} role="columnheader" className="py-2 pl-2.5 text-label font-medium text-muted">{d}</div>)}
             </div>
-            <div className="grid grid-cols-7">
+            <div className="grid grid-cols-7 [&>*:nth-child(7n)]:border-r-0">
               {cells.map((d, i) => {
-                if (!d) return <div key={`b${i}`} className="min-h-14 border-b border-r border-line bg-sunk/40 sm:min-h-24" />;
+                if (!d) return <div key={`b${i}`} className="min-h-14 border-b border-r border-border bg-surface-2/50 sm:min-h-24" aria-hidden />;
                 const evs = byDay.get(d) ?? [];
                 const isSel = d === selected;
+                const isToday = d === today;
                 return (
                   <button
                     key={d}
                     type="button"
                     role="gridcell"
                     aria-selected={isSel}
-                    aria-label={`${formatWeekday(d)}, ${evs.length} tournaments`}
+                    aria-label={`${formatWeekday(d)}, ${pluralize(evs.length, "tournament")}`}
                     onClick={() => setPicked(d)}
-                    className={cn("flex min-h-14 cursor-pointer flex-col items-start gap-0.5 border-b border-r border-line p-1 text-left sm:min-h-24 sm:p-1.5", isSel ? "bg-accent-soft ring-2 ring-inset ring-accent" : "hover:bg-sunk/60")}
+                    className={cn(
+                      "relative flex min-h-14 flex-col items-start gap-1 border-b border-r border-border p-1.5 text-left transition-colors sm:min-h-24 sm:p-2",
+                      isSel ? "bg-accent-soft" : "hover:bg-surface-2",
+                      d < today && "text-muted"
+                    )}
                   >
-                    <span className={cn("flex h-6 w-6 items-center justify-center rounded text-xs font-bold", d === today && "bg-accent text-accent-ink")}>{+d.slice(8)}</span>
+                    {isSel && <span className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-accent" aria-hidden />}
+                    <span className={cn("flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-small font-medium", isToday && "bg-accent text-accent-fg")}>{+d.slice(8)}</span>
                     <span className="hidden w-full flex-col gap-0.5 sm:flex">
-                      {evs.slice(0, 2).map((e) => <span key={e.eventCode} className="truncate rounded bg-accent px-1 text-[11px] font-semibold text-accent-ink">{e.name}</span>)}
+                      {evs.slice(0, 2).map((e) => (
+                        <span key={e.eventCode} className="truncate rounded-[4px] border-l-2 border-accent bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium leading-tight text-fg">{displayName(e.name)}</span>
+                      ))}
                       {evs.length > 2 && <span className="px-1 text-[11px] text-muted">+{evs.length - 2} more</span>}
                     </span>
-                    {evs.length > 0 && <span className="mt-auto flex gap-0.5 sm:hidden">{evs.slice(0, 3).map((e) => <span key={e.eventCode} className="h-1.5 w-1.5 rounded-full bg-accent" />)}</span>}
+                    {evs.length > 0 && (
+                      <span className="mt-auto flex gap-0.5 sm:hidden" aria-hidden>
+                        {evs.slice(0, 3).map((e) => <span key={e.eventCode} className="h-1 w-1 rounded-full bg-accent" />)}
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
-          <section className="mt-5" aria-label={`Tournaments on ${formatWeekday(selected)}`}>
-            <h3 className="mb-3 font-display text-2xl font-bold">{formatWeekday(selected)}</h3>
+          <section className="mt-6" aria-label={`Tournaments on ${formatWeekday(selected)}`}>
+            <h3 className="mb-3 flex items-baseline gap-2 text-[15px] font-semibold tracking-h3">
+              {formatWeekday(selected)}
+              <span className="text-small font-normal text-muted">{pluralize(dayEvents.length, "tournament")}</span>
+            </h3>
             {dayEvents.length ? (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{dayEvents.map((e, i) => <EventCard key={e.eventCode} e={e} index={i} />)}</div>
+              <ul className="space-y-2">{dayEvents.map((e) => <li key={e.eventCode}><EventRow e={e} onOpen={onOpen} /></li>)}</ul>
             ) : (
-              <p className="text-muted">No tournaments on this day. <button type="button" className="cursor-pointer text-accent underline" onClick={() => update({ view: "list" })}>Switch to list view</button> to browse everything.</p>
+              <p className="rounded-md border border-dashed border-border-strong px-4 py-6 text-center text-body text-muted">
+                Nothing on this day. Pick another date, or{" "}
+                <button type="button" className="font-medium text-accent hover:underline" onClick={() => update({ view: "cards" })}>see the full list</button>.
+              </p>
             )}
           </section>
         </div>
@@ -104,3 +127,4 @@ export function CalendarView({ filters, update }: { filters: Filters; update: (p
     </div>
   );
 }
+

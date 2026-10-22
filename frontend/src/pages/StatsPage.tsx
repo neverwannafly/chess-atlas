@@ -1,106 +1,120 @@
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
-import { CountUp } from "@/components/CountUp";
 import { ErrorState } from "@/components/States";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useStats } from "@/hooks/queries";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { formatInr, formatInrFull, formatMonthShort } from "@/lib/format";
+import { formatInr, formatInrFull, formatMonthLabel, formatMonthShort, pluralize } from "@/lib/format";
 import type { FacetCount } from "@/types/event";
 
-const EASE = [0.16, 1, 0.3, 1] as const;
-
-function Bars({ title, data, to }: { title: string; data: FacetCount[]; to: (v: string) => string }) {
-  const max = Math.max(1, ...data.map((d) => d.count));
-  const reduce = useReducedMotion();
+function Panel({ id, title, note, children }: { id: string; title: string; note?: string; children: React.ReactNode }) {
   return (
-    <section aria-labelledby={title} className="rounded-lg border-2 border-ink/20 bg-surface p-5">
-      <h2 id={title} className="mb-4 font-display text-2xl font-extrabold">{title}</h2>
-      <ul className="space-y-1">
-        {data.map((d, i) => (
-          <li key={d.value}>
-            <Link to={to(d.value)} className="grid min-h-10 grid-cols-[7.5rem_1fr_2rem] items-center gap-3 rounded text-[15px] hover:bg-sunk sm:grid-cols-[9rem_1fr_2rem]">
-              <span className="truncate font-medium">{d.value}</span>
-              <span className="h-4 bg-sunk" aria-hidden>
-                <motion.span
-                  className="block h-full origin-left bg-accent"
-                  style={{ width: `${(d.count / max) * 100}%` }}
-                  initial={reduce ? false : { scaleX: 0 }}
-                  whileInView={{ scaleX: 1 }}
-                  viewport={{ once: true, margin: "0px 0px -8% 0px" }}
-                  transition={{ duration: 0.8, delay: i * 0.05, ease: EASE }}
-                />
-              </span>
-              <span className="text-right font-bold">{d.count}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <section aria-labelledby={id} className="rounded-lg border border-border bg-surface p-5 shadow-e1 sm:p-6">
+      <div className="mb-5 flex items-baseline justify-between gap-3">
+        <h2 id={id} className="text-[15px] font-semibold tracking-h3">{title}</h2>
+        {note && <span className="text-small text-muted">{note}</span>}
+      </div>
+      {children}
     </section>
+  );
+}
+
+/** Ranked horizontal bars; each row links to the listing with that filter applied. */
+function Bars({ data, to, label }: { data: FacetCount[]; to: (v: string) => string; label: (d: FacetCount) => string }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  return (
+    <ul className="space-y-0.5">
+      {data.map((d, i) => (
+        <li key={d.value}>
+          <Link
+            to={to(d.value)}
+            aria-label={label(d)}
+            className="group grid min-h-9 grid-cols-[8.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 rounded-sm px-2 text-ui transition-colors hover:bg-surface-2 sm:grid-cols-[10rem_minmax(0,1fr)_2.5rem]"
+          >
+            <span className="truncate">{d.value}</span>
+            <span className="relative h-2" aria-hidden>
+              <span
+                className={`absolute inset-y-0 left-0 rounded-r-[4px] transition-colors group-hover:bg-accent ${i === 0 ? "bg-accent" : "bg-border-strong"}`}
+                style={{ width: `${Math.max(2, (d.count / max) * 100)}%` }}
+              />
+            </span>
+            <span className="text-right font-medium">{d.count}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Months({ data }: { data: { month: string; count: number }[] }) {
+  const max = Math.max(1, ...data.map((m) => m.count));
+  const peak = data.reduce((a, m) => (m.count > a.count ? m : a), data[0]);
+  return (
+    <ol className="grid h-56 grid-cols-12 items-end gap-1.5 border-b border-border sm:gap-3">
+      {data.map((m) => (
+        <li key={m.month} className="group relative flex h-full min-w-0 flex-col items-center justify-end">
+          <Link
+            to={`/?from=${m.month}-01&to=${m.month}-${new Date(Date.UTC(+m.month.slice(0, 4), +m.month.slice(5, 7), 0)).getUTCDate()}`}
+            aria-label={`${formatMonthLabel(m.month)}: ${pluralize(m.count, "tournament")}`}
+            className="flex h-full w-full flex-col items-center justify-end gap-1.5 rounded-t-sm pb-px hover:bg-surface-2"
+          >
+            <span className="text-label font-medium text-muted group-hover:text-fg">{m.count || ""}</span>
+            <span
+              className={`w-full max-w-10 rounded-t-[4px] transition-colors group-hover:bg-accent ${m === peak ? "bg-accent" : "bg-border-strong"}`}
+              style={{ height: `${(m.count / max) * 82}%`, minHeight: m.count ? 4 : 1 }}
+            />
+          </Link>
+          <span className="absolute -bottom-6 text-label text-muted">{formatMonthShort(m.month)}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
 export default function StatsPage() {
   useDocumentMeta("Insights", "Where and when Indian chess tournaments happen: events by month, state and time control.");
   const { data: s, isError, error, refetch } = useStats();
-  const reduce = useReducedMotion();
   if (isError) return <div className="mx-auto max-w-xl px-4 py-16"><ErrorState message={error.message} onRetry={() => refetch()} /></div>;
-  const max = Math.max(1, ...(s?.byMonth.map((m) => m.count) ?? [1]));
-  const tiles: { v: number; l: string; fmt?: (n: number) => string; t?: string }[] = s
+
+  const tiles = s
     ? [
-        { v: s.upcoming, l: "upcoming" },
-        { v: s.ongoing, l: "ongoing now" },
-        ...(s.upcomingPrizePoolInr > 0 ? [{ v: s.upcomingPrizePoolInr, l: "prize pool ahead", fmt: (n: number) => formatInr(Math.round(n)), t: formatInrFull(s.upcomingPrizePoolInr) }] : []),
-        { v: s.extracted, l: `of ${s.total} have parsed details` },
+        { v: String(s.upcoming), l: "upcoming" },
+        { v: String(s.ongoing), l: "being played now" },
+        ...(s.upcomingPrizePoolInr > 0 ? [{ v: formatInr(s.upcomingPrizePoolInr), l: "in prize funds ahead", t: formatInrFull(s.upcomingPrizePoolInr) }] : []),
+        { v: `${Math.round((s.extracted / Math.max(1, s.total)) * 100)}%`, l: `of ${s.total} with brochure details` },
       ]
     : [];
+
   return (
-    <>
-      <div className="on-hall border-b-4 border-gold bg-hall text-hall-ink">
-        <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:pt-14">
-          <h1 className="display-xl text-6xl sm:text-8xl">Insights</h1>
-          <p className="mt-4 max-w-xl text-lg text-hall-muted">Where and when the Indian tournament calendar fills up, from upcoming and ongoing events.</p>
-        </div>
-      </div>
-      <div className="mx-auto max-w-6xl px-4">
-        {!s ? (
-          <Skeleton className="mt-8 h-72 w-full" />
-        ) : (
-          <div className="space-y-6">
-            <dl className="relative -mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {tiles.map((t, i) => (
-                <div key={t.l} className={`rounded-lg border-2 border-ink/20 p-4 shadow-[0_4px_0_var(--line)] ${i % 2 ? "sq-light" : "bg-surface"}`}>
-                  <dd className="font-display text-5xl font-extrabold leading-none" title={t.t}><CountUp value={t.v} format={t.fmt} /></dd>
-                  <dt className="mt-1.5 text-[14px] opacity-80">{t.l}</dt>
-                </div>
-              ))}
-            </dl>
-            <section aria-labelledby="by-month" className="rounded-lg border-2 border-ink/20 bg-surface p-5">
-              <h2 id="by-month" className="mb-4 font-display text-2xl font-extrabold">Events by month</h2>
-              <ol className="flex h-52 items-end gap-1.5 sm:gap-3">
-                {s.byMonth.map((m, i) => (
-                  <li key={m.month} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1" aria-label={`${m.month}: ${m.count} events`}>
-                    <span className="text-xs font-bold">{m.count}</span>
-                    <motion.span
-                      className="w-full origin-bottom rounded-t-sm bg-accent"
-                      style={{ height: `${(m.count / max) * 100}%`, minHeight: m.count ? 4 : 1 }}
-                      initial={reduce ? false : { scaleY: 0 }}
-                      whileInView={{ scaleY: 1 }}
-                      viewport={{ once: true, margin: "0px 0px -10% 0px" }}
-                      transition={{ duration: 0.7, delay: i * 0.04, ease: EASE }}
-                    />
-                    <span className="text-[12px] text-muted">{formatMonthShort(m.month)}</span>
-                  </li>
-                ))}
-              </ol>
-            </section>
-            <div className="grid gap-6 md:grid-cols-2">
-              <Bars title="By state" data={s.byState.slice(0, 12)} to={(v) => `/?state=${encodeURIComponent(v)}`} />
-              <Bars title="By time control" data={s.byTimeControl} to={(v) => `/?tc=${encodeURIComponent(v)}`} />
-            </div>
+    <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
+      <header className="pb-8 pt-10 sm:pt-14">
+        <h1 className="text-[30px] font-semibold tracking-h1 sm:text-h1">Insights</h1>
+        <p className="mt-3 max-w-[56ch] text-body-lg text-muted">When and where the Indian tournament calendar fills up, counted over upcoming and ongoing events. Select any bar to see those tournaments.</p>
+      </header>
+      {!s ? (
+        <Skeleton className="h-72 w-full rounded-lg" />
+      ) : (
+        <div className="space-y-5">
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+            {tiles.map((t) => (
+              <div key={t.l} className="bg-surface p-5">
+                <dd className="text-stat font-medium tracking-h1" title={t.t}>{t.v}</dd>
+                <dt className="mt-2 text-small text-muted">{t.l}</dt>
+              </div>
+            ))}
+          </dl>
+          <Panel id="by-month" title="Tournaments by start month" note="next 12 months">
+            <div className="pb-6"><Months data={s.byMonth} /></div>
+          </Panel>
+          <div className="grid gap-5 md:grid-cols-2">
+            <Panel id="by-state" title="By state" note={`top ${Math.min(12, s.byState.length)} of ${s.byState.length}`}>
+              <Bars data={s.byState.slice(0, 12)} to={(v) => `/?state=${encodeURIComponent(v)}`} label={(d) => `${d.value}: ${pluralize(d.count, "tournament")}`} />
+            </Panel>
+            <Panel id="by-tc" title="By time control">
+              <Bars data={s.byTimeControl} to={(v) => `/?tc=${encodeURIComponent(v)}`} label={(d) => `${d.value}: ${pluralize(d.count, "tournament")}`} />
+            </Panel>
           </div>
-        )}
-      </div>
-    </>
+        </div>
+      )}
+    </div>
   );
 }

@@ -81,3 +81,14 @@ export const pluralize = (n: number, one: string, many = `${one}s`) => `${full.f
 
 export const location = (e: { city: string | null; state: string | null }) =>
   [e.city, e.state].filter(Boolean).join(", ") || "Location TBA";
+
+export const formatWeekdayShort = (d: string) => fmt(d, { weekday: "short" });
+export const formatDayMonth = (d: string) => fmt(d, { day: "numeric", month: "short" });
+/** Money for small amounts in full (₹2,000), large ones compact (₹5.5L). */
+export const formatMoney = (n: number) => (n >= 1e5 ? formatInr(n) : formatInrFull(n));
+/** "₹2,000–3,500" / "₹1L–2.5L" */
+export function formatMoneyRange(min: number, max: number): string {
+  if (min === max) return formatMoney(min);
+  const b = formatMoney(max).replace("₹", "");
+  return `${formatMoney(min)}–${b}`;
+}
