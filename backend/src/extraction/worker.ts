@@ -141,7 +141,7 @@ export async function extractBrochure(
   throw new Error(`validation failed after retry: ${lastErr.replace(/\n/g, "; ").slice(0, 300)}`);
 }
 
-async function api(o: Opts, method: string, path: string, body?: unknown): Promise<any> {
+async function api(o: Opts, method: string, path: string, body?: unknown, tries = 5): Promise<any> {
   const res = await fetch(o.api + path, {
     method,
     headers: { Authorization: `Bearer ${o.token}`, "Content-Type": "application/json" },
@@ -149,6 +149,12 @@ async function api(o: Opts, method: string, path: string, body?: unknown): Promi
     signal: AbortSignal.timeout(30_000),
   });
   const txt = await res.text();
+  // admin API is rate limited per minute; cached replays can outrun it
+  if (res.status === 429 && tries > 1) {
+    const wait = Math.min(Number(res.headers.get("retry-after")) || 10, 70);
+    await new Promise((r) => setTimeout(r, wait * 1000 + Math.random() * 1000));
+    return api(o, method, path, body, tries - 1);
+  }
   if (!res.ok) throw new Error(`${method} ${path} -> HTTP ${res.status} ${txt.slice(0, 300)}`);
   return txt ? JSON.parse(txt) : null;
 }
