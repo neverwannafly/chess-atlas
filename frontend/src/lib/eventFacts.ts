@@ -1,6 +1,6 @@
 import type { EventDetail, EventSummary } from "@/types/event";
 import {
-  daysBetween, deadlineDays, formatDateRange, formatDayMonth, formatMoney, formatMoneyRange, formatWeekdayShort, relativeStart, todayIST,
+  daysBetween, deadlineDays, formatDateRange, formatDayMonth, formatInr, formatMoney, formatMoneyRange, formatWeekdayShort, relativeStart, todayIST,
 } from "@/lib/format";
 
 export type Tone = "live" | "soon" | "future" | "past";
@@ -136,4 +136,73 @@ export function displayName(name: string): string {
 export function placeLine(e: Pick<EventSummary, "city" | "state" | "venueName">): string {
   const loc = [e.city, e.state].filter(Boolean).join(", ");
   return [e.venueName, loc].filter(Boolean).join(" · ") || "Venue to be announced";
+}
+
+/* ───────────────────────── listing row facts ───────────────────────── */
+
+export interface RowFacts {
+  format: string | null;
+  /** "90+30" */
+  tc: string | null;
+  rounds: number | null;
+  fide: boolean | null;
+  prize: string | null;
+  prizeTitle?: string;
+  prizeNote: string | null;
+  fee: string | null;
+  feeNote: string | null;
+  reg: { label: string; tone: "warn" | "muted" | "ok" | "default" } | null;
+  live: boolean;
+  past: boolean;
+  /** "Day 3 of 6" for ongoing multi-day events. */
+  dayOf: string | null;
+}
+
+/** The compact facts a listing row shows; detail (when loaded) refines time control and fees. */
+export function rowFacts(e: EventSummary, detail?: EventDetail | null, today = todayIST()): RowFacts {
+  const d = detail?.details ?? null;
+  const live = e.startDate <= today && e.endDate >= today;
+  const past = e.endDate < today;
+  const total = d?.prizes.totalInr ?? e.totalPrizeInr;
+  const first = d?.prizes.places.find((p) => p.amountInr != null && p.amountInr > 0)?.amountInr ?? null;
+
+  const fees = d?.entryFees.map((f) => f.amountInr).filter((n): n is number => n != null) ?? [];
+  const paid = fees.filter((n) => n > 0);
+  let fee: string | null = null;
+  let feeNote: string | null = null;
+  if (fees.length) {
+    fee = paid.length ? formatMoney(Math.min(...paid)) : "Free";
+    feeNote = paid.length && paid.length < fees.length ? "free for some" : paid.length > 1 ? `${new Set(paid).size} tiers` : null;
+  } else if (e.entryFeeMinInr != null) {
+    fee = e.entryFeeMinInr === 0 ? "Free" : formatMoney(e.entryFeeMinInr);
+    feeNote = e.entryFeeMinInr === 0 && e.extractionStatus === "done" ? "for some" : null;
+  }
+
+  let reg: RowFacts["reg"] = null;
+  const deadline = d?.registration.deadline ?? e.registrationDeadline;
+  if (!past && deadline && deadline <= e.endDate) {
+    const n = deadlineDays(deadline, today);
+    if (n == null) reg = { label: "Closed", tone: "muted" };
+    else if (n === 0) reg = { label: "Closes today", tone: "warn" };
+    else if (n === 1) reg = { label: "Closes tomorrow", tone: "warn" };
+    else if (n <= 7) reg = { label: `Closes in ${n} days`, tone: "warn" };
+    else reg = { label: `Open until ${formatDayMonth(deadline)}`, tone: "default" };
+  } else if (past) reg = null;
+
+  const span = daysBetween(e.startDate, e.endDate) + 1;
+  return {
+    format: d?.timeControl.type ?? e.timeControlType,
+    tc: tcShort(d?.timeControl.baseMinutes, d?.timeControl.incrementSeconds),
+    rounds: d?.rounds ?? e.rounds,
+    fide: d?.fideRated ?? e.fideRated,
+    prize: total != null && total > 0 ? formatInr(total) : first ? `1st ${formatInr(first)}` : null,
+    prizeTitle: total ? `₹${total.toLocaleString("en-IN")}` : undefined,
+    prizeNote: total && first ? `1st ${formatInr(first)}` : null,
+    fee,
+    feeNote,
+    reg,
+    live,
+    past,
+    dayOf: live && span > 1 ? `Day ${daysBetween(e.startDate, today) + 1} of ${span}` : null,
+  };
 }

@@ -64,6 +64,23 @@ Counts are over upcoming+ongoing events. `FacetCount = { value: string, count: n
 
 → `{ data: Stats }` (see types).
 
+### `GET /api/meta/insights`
+
+→ `{ data: Insights }` (see types). Powers `/insights`. Built in one pass over all events
+(`backend/src/db/insights.ts`), cached in memory and rebuilt when the events table changes
+(row count or latest `updatedAt`), the IST date rolls over, or after 10 minutes.
+
+- `months`: every start month on record, with counts per format and summed prize pool.
+- `days`: every date with a tournament in play (`inPlay`) and how many start that day (`starting`).
+- `thisWeek`: today → today+6: starting / ongoing counts, deadlines closing, biggest purse, next 5.
+- `upcoming` and `all`: the same `InsightsScope` aggregates over events not yet finished
+  (`endDate >= today`) and over everything on record.
+
+Notes on derived numbers: festival sections (Category A/B/C, Rapid/Blitz side events) that quote the
+same purse in the same state within 14 days count that purse once. `entryFeeInr` / fee bands use the
+regular adult fee from the brochure's fee table, not `entryFeeMinInr` (which is often ₹0 for
+titled players). Category-prize kinds are keyword-matched over category/label text.
+
 ### `GET /api/health` → `{ data: { status: "ok", events, lastScrapeAt, version } }`
 
 ## Admin API

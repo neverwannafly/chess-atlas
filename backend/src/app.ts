@@ -37,7 +37,7 @@ export function createApp() {
           "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
           "img-src": ["'self'", "data:", "blob:", "https:"],
           "connect-src": ["'self'"],
-          "frame-src": ["https://www.google.com/maps"],
+          "frame-src": ["https://www.google.com"],
           "object-src": ["'none'"],
           "upgrade-insecure-requests": null,
           "frame-ancestors": ["'self'"],

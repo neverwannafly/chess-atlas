@@ -93,3 +93,10 @@ export async function fetchStats(): Promise<Stats> {
 }
 
 export const calendarUrl = (code: string) => `/api/events/${encodeURIComponent(code)}/calendar.ics`;
+
+// ---------------------------------------------------------------- insights
+import type { Insights } from "@/types/event";
+
+export async function fetchInsights(): Promise<Insights> {
+  return (await get<{ data: Insights }>("/api/meta/insights")).data;
+}

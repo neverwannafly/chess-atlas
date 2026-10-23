@@ -129,3 +129,90 @@ export interface ScrapedEvent {
   place: string;
   brochureUrl: string | null;
 }
+
+// ---------------------------------------------------------------- insights (GET /api/meta/insights)
+
+export type InsightFormat = TimeControlType | "Unknown";
+
+/** A tournament referenced from an insight (links to /events/:eventCode). */
+export interface InsightEvent {
+  eventCode: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  city: string | null;
+  state: string | null;
+  timeControlType: TimeControlType | null;
+  totalPrizeInr: number | null;
+  entryFeeMinInr: number | null;
+  registrationDeadline: string | null;
+  /** What a regular adult entrant pays, from the brochure's fee table (titled-player waivers and late fees ignored). */
+  entryFeeInr: number | null;
+}
+
+export interface InsightBand {
+  label: string;
+  /** Inclusive lower bound (₹ or days). */
+  min: number;
+  /** Exclusive upper bound; null = open-ended. */
+  max: number | null;
+  count: number;
+}
+
+/** Aggregates over one slice of events ("upcoming" = not yet finished, "all" = everything on record). */
+export interface InsightsScope {
+  total: number;
+  /** Events with extracted brochure data. */
+  withDetails: number;
+  prizePoolInr: number;
+  /** Events with a known prize pool. */
+  prizeKnown: number;
+  medianPrizeInr: number | null;
+  /** Median standard entry fee (see InsightEvent.entryFeeInr). */
+  medianEntryFeeInr: number | null;
+  /** Mean count of listed prizes (place + category) per extracted event. */
+  avgPrizesPerEvent: number | null;
+  states: number;
+  cities: number;
+  formats: { format: InsightFormat; count: number; medianRounds: number | null; medianPrizeInr: number | null }[];
+  /** Most common time controls, e.g. "90+30". */
+  timeControls: { label: string; baseMinutes: number; incrementSeconds: number; format: TimeControlType | null; count: number }[];
+  byState: { state: string; count: number; prizeInr: number }[];
+  topCities: { city: string; state: string | null; count: number }[];
+  prizeBands: InsightBand[];
+  feeBands: InsightBand[];
+  topPrizes: InsightEvent[];
+  /** Highest prize pool per rupee of standard entry fee (fee ≥ ₹100). */
+  bestValue: (InsightEvent & { ratio: number })[];
+  /** Start-day counts, Monday first (index 0 = Mon … 6 = Sun). */
+  weekdays: number[];
+  /** Length in days: "1", "2", … "7+". */
+  durations: { label: string; count: number }[];
+  /** Days between registration deadline and start. */
+  leadBands: InsightBand[];
+  medianLeadDays: number | null;
+  /** Share of extracted events that list each kind of category prize. */
+  categoryPrizes: { key: string; label: string; events: number; share: number }[];
+}
+
+export interface Insights {
+  generatedAt: string;
+  /** YYYY-MM-DD, Asia/Kolkata. */
+  today: string;
+  /** Every month from the first to the last event on record, by start month. */
+  months: { month: string; total: number; prizeInr: number; byFormat: Record<InsightFormat, number> }[];
+  /** Days with at least one tournament in play. */
+  days: { date: string; inPlay: number; starting: number }[];
+  thisWeek: {
+    from: string;
+    to: string;
+    starting: number;
+    ongoing: number;
+    /** Registration deadlines falling in the next 7 days. */
+    closingSoon: number;
+    biggest: InsightEvent | null;
+    next: InsightEvent[];
+  };
+  upcoming: InsightsScope;
+  all: InsightsScope;
+}

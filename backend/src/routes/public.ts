@@ -5,6 +5,7 @@ import { addDays } from "../lib/dates.js";
 import { AICF_URL, countEvents, getEventDetail, getFacets, getMeta, getStats, listEvents } from "../db/events.js";
 import { buildIcs } from "../lib/ics.js";
 import { appVersion } from "../lib/version.js";
+import { getInsights } from "../db/insights.js";
 
 const router = Router();
 
@@ -97,6 +98,14 @@ router.get(
   wrap((_req, res) => {
     res.set("Cache-Control", PUBLIC_CACHE);
     res.json({ data: getStats() });
+  }),
+);
+
+router.get(
+  "/meta/insights",
+  wrap((_req, res) => {
+    res.set("Cache-Control", PUBLIC_CACHE);
+    res.json({ data: getInsights() });
   }),
 );
 

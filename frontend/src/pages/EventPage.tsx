@@ -1,309 +1,187 @@
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarDays, ExternalLink, FileText, MapPin } from "lucide-react";
-import type { BrochureExtraction, EventDetail } from "@/types/event";
-import { Badge, StatusBadge } from "@/components/Badge";
-import { Button } from "@/components/ui/button";
+import { useParams } from "react-router-dom";
+import type { EventDetail, EventSummary } from "@/types/event";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FactRows } from "@/components/event/Facts";
-import {CategoryPrizes, ContactList, EventActions, FeeTable, PrizeLadder, ScheduleTimeline, ShareButton } from "@/components/event/DetailParts";
-import { groupCategoryPrizes, hasPrizes, venueQuery } from "@/lib/eventDetail";
 import { ErrorState } from "@/components/States";
 import NotFoundPage from "@/pages/NotFoundPage";
+import { EventHeader } from "@/components/event-page/Header";
+import { KeyFacts } from "@/components/event-page/KeyFacts";
+import { PrizesBody } from "@/components/event-page/Prizes";
+import { ContactsBody, EligibilityBody, EntryBody, ScheduleBody, Section, VenueBody } from "@/components/event-page/Sections";
+import { CondensedBar, SectionNav } from "@/components/event-page/Chrome";
+import { MoreTournaments } from "@/components/event-page/More";
+import { SparseNotice } from "@/components/event-page/Sparse";
+import { Reveal } from "@/components/event-page/motion";
+import { useCachedSummary, useScrolledPast, useScrollSpy } from "@/components/event-page/hooks";
 import { useEvent } from "@/hooks/queries";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { ApiError, calendarUrl } from "@/lib/api";
-import { deriveFacts, displayName, type Fact } from "@/lib/eventFacts";
-import { formatDate, formatDateRange, formatInrFull, location, pluralize } from "@/lib/format";
-import { mapsEmbedUrl, mapsOpenUrl } from "@/lib/utils";
+import { ApiError } from "@/lib/api";
+import { displayName } from "@/lib/eventFacts";
+import { formatParts, isRich, prizeMeta, sectionsFor } from "@/lib/eventDetail";
+import { formatDate, formatDateRange, location, pluralize } from "@/lib/format";
 
-function Section({ id, title, aside, children }: { id: string; title: string; aside?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section id={id} aria-labelledby={`${id}-h`} className="border-t border-border py-8 first:border-t-0 first:pt-0">
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id={`${id}-h`} className="text-[19px] font-semibold tracking-h2">{title}</h2>
-        {aside}
-      </div>
-      {children}
-    </section>
-  );
+function preview(s: EventSummary): EventDetail {
+  return { ...s, details: null, extractedAt: null, extractionModel: null, aicfUrl: "https://aicf.in/all-events/", createdAt: "", updatedAt: "" };
 }
 
-function Tags({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <h3 className="mb-2 text-small text-muted">{title}</h3>
-      <ul className="flex flex-wrap gap-1.5">
-        {items.map((c) => <li key={c}><Badge tone="outline" className="h-7 px-2.5 text-ui">{c}</Badge></li>)}
-      </ul>
-    </div>
-  );
+function describe(e: EventDetail) {
+  const d = e.details;
+  const lead = d?.tagline ?? d?.summary?.split(/\n+/)[0];
+  if (lead) return lead;
+  return `${displayName(e.name)}: ${formatDateRange(e.startDate, e.endDate, true)} in ${location(e)}. Dates, prizes, entry fees and registration.`;
 }
 
-function sectionsFor(e: EventDetail, d: BrochureExtraction | null) {
-  const s: { id: string; title: string }[] = [];
-  if (!d) return s;
-  if (d.summary || d.tagline) s.push({ id: "about", title: "About" });
-  if (hasPrizes(d.prizes)) s.push({ id: "prizes", title: "Prizes" });
-  if (d.entryFees.length || d.registration.notes) s.push({ id: "fees", title: "Entry and registration" });
-  if (d.categories.rating.length || d.categories.age.length || d.eligibility) s.push({ id: "eligibility", title: "Categories and eligibility" });
-  if (d.schedule.length) s.push({ id: "schedule", title: "Schedule" });
-  if (venueQuery(e, d)) s.push({ id: "venue", title: "Venue" });
-  if (d.organizer || d.chiefArbiter || d.contacts.length) s.push({ id: "people", title: "Organiser and contacts" });
-  if (d.accommodation) s.push({ id: "stay", title: "Accommodation" });
-  return s;
-}
-
-function Main({ e, d }: { e: EventDetail; d: BrochureExtraction }) {
-  const paras = d.summary?.split(/\n{2,}/).filter(Boolean) ?? [];
-  const mapQ = venueQuery(e, d);
-  const cats = groupCategoryPrizes(d.prizes.categoryPrizes);
-  const prizeMeta = [d.prizes.places.length && pluralize(d.prizes.places.length, "place"), d.prizes.categoryPrizes.length && `${pluralize(d.prizes.categoryPrizes.length, "category prize")}`].filter(Boolean).join(", ");
+function Overview({ e }: { e: EventDetail }) {
+  const d = e.details;
+  const paras = d?.summary?.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean) ?? [];
+  const f = formatParts(e, d);
+  const facts: [string, string][] = [];
+  if (f.raw) facts.push(["Time control", f.raw]);
+  else if (f.tc) facts.push(["Time control", `${f.tc}${f.type ? ` (${f.type})` : ""}`]);
+  if (f.rounds) facts.push(["Rounds", pluralize(f.rounds, "round")]);
+  if (d?.format) facts.push(["Pairing", d.format]);
+  if (d?.organizer) facts.push(["Organiser", d.organizer]);
+  const rich = isRich(e);
   return (
-    <>
-      {(paras.length > 0 || d.tagline) && (
-        <Section id="about" title="About">
-          <div className="max-w-[68ch] space-y-3 text-body-lg leading-relaxed text-fg/90">
-            {paras.length ? paras.map((p, i) => <p key={i}>{p}</p>) : <p>{d.tagline}</p>}
-          </div>
-        </Section>
-      )}
-
-      {hasPrizes(d.prizes) && (
-        <Section id="prizes" title="Prizes" aside={prizeMeta ? <span className="text-small text-muted">{prizeMeta}</span> : undefined}>
-          {d.prizes.totalInr != null && d.prizes.totalInr > 0 && (
-            <p className="mb-6">
-              <span className="block text-[34px] font-medium leading-none tracking-h1" title={formatInrFull(d.prizes.totalInr)}>{formatInrFull(d.prizes.totalInr)}</span>
-              <span className="mt-1.5 block text-small text-muted">total prize fund</span>
-            </p>
-          )}
-          {d.prizes.places.length > 0 && (
-            <div className="max-w-xl">
-              <h3 className="mb-2 text-small text-muted">Main standings</h3>
-              <PrizeLadder places={d.prizes.places} limit={10} />
-            </div>
-          )}
-          {cats.length > 0 && (
-            <div className="mt-8">
-              <h3 className="mb-3 text-small text-muted">Category prizes, {pluralize(cats.length, "group")}</h3>
-              <CategoryPrizes list={d.prizes.categoryPrizes} />
-            </div>
-          )}
-          {d.prizes.notes && <p className="mt-5 max-w-[68ch] text-small text-muted">{d.prizes.notes}</p>}
-        </Section>
-      )}
-
-      {(d.entryFees.length > 0 || d.registration.notes) && (
-        <Section id="fees" title="Entry and registration">
-          {d.entryFees.length > 0 && <div className="max-w-xl"><FeeTable fees={d.entryFees} /></div>}
-          {d.registration.notes && <p className="mt-4 max-w-[68ch] text-body text-muted">{d.registration.notes}</p>}
-        </Section>
-      )}
-
-      {(d.categories.rating.length > 0 || d.categories.age.length > 0 || d.eligibility) && (
-        <Section id="eligibility" title="Categories and eligibility">
-          <div className="space-y-5">
-            {d.categories.rating.length > 0 && <Tags title="Rating categories" items={d.categories.rating} />}
-            {d.categories.age.length > 0 && <Tags title="Age categories" items={d.categories.age} />}
-            {d.eligibility && <p className="max-w-[68ch] text-body">{d.eligibility}</p>}
-          </div>
-        </Section>
-      )}
-
-      {d.schedule.length > 0 && (
-        <Section id="schedule" title="Schedule">
-          <ScheduleTimeline items={d.schedule} />
-        </Section>
-      )}
-
-      {mapQ && (
-        <Section id="venue" title="Venue">
-          <p className="text-body font-medium">{d.venue.name ?? e.venueName ?? location(e)}</p>
-          {d.venue.address && <p className="text-body text-muted">{d.venue.address}{d.venue.pincode ? ` ${d.venue.pincode}` : ""}</p>}
-          <div className="mt-4 overflow-hidden rounded-md border border-border bg-surface-2">
-            <iframe title={`Map of ${d.venue.name ?? "the venue"}`} src={mapsEmbedUrl(mapQ)} loading="lazy" referrerPolicy="no-referrer-when-downgrade" className="block h-72 w-full" />
-          </div>
-          <Button asChild variant="secondary" className="mt-3">
-            <a href={mapsOpenUrl(mapQ)} target="_blank" rel="noopener noreferrer"><MapPin aria-hidden />Open in Google Maps</a>
-          </Button>
-        </Section>
-      )}
-
-      {(d.organizer || d.chiefArbiter || d.contacts.length > 0) && (
-        <Section id="people" title="Organiser and contacts">
-          {(d.organizer || d.chiefArbiter) && (
-            <dl className="mb-5 grid gap-4 sm:grid-cols-2">
-              {d.organizer && <div><dt className="text-small text-muted">Organiser</dt><dd className="text-body font-medium">{d.organizer}</dd></div>}
-              {d.chiefArbiter && <div><dt className="text-small text-muted">Chief arbiter</dt><dd className="text-body font-medium">{d.chiefArbiter}</dd></div>}
-            </dl>
-          )}
-          {d.contacts.length > 0 && <ContactList contacts={d.contacts} />}
-        </Section>
-      )}
-
-      {d.accommodation && (
-        <Section id="stay" title="Accommodation">
-          <p className="max-w-[68ch] text-body">{d.accommodation}</p>
-        </Section>
-      )}
-    </>
-  );
-}
-
-function Pending({ e, empty }: { e: EventDetail; empty: boolean }) {
-  const mapQ = [e.venueName, e.city, e.state].filter(Boolean).join(", ");
-  return (
-    <>
-      <section className="rounded-md border border-border bg-surface p-6 sm:p-8" aria-labelledby="pending-h">
-        <h2 id="pending-h" className="text-[19px] font-semibold tracking-h2">
-          {empty ? "The brochure doesn't list prizes or fees" : e.extractionStatus === "no_brochure" ? "Brochure not published yet" : "Brochure details on the way"}
-        </h2>
-        <p className="mt-2 max-w-[60ch] text-body text-muted">
-          {empty
-            ? "We read the brochure but it doesn't spell out the prize fund, fees or schedule. The organiser or the AICF listing will have the rest."
-            : e.extractionStatus === "no_brochure"
-              ? "The organisers haven't uploaded a brochure to the AICF calendar. When they do, the prize fund, entry fees, schedule and contacts will appear on this page."
-              : "The brochure is published and we're reading it. Until then, the PDF has everything."}
-        </p>
-        {!empty && (
-        <ul className="mt-6 grid gap-px overflow-hidden rounded-md border border-border bg-border text-small sm:grid-cols-3">
-          {["Prize fund and places", "Entry fees by category", "Round schedule and contacts"].map((t) => (
-            <li key={t} className="bg-surface-2 px-4 py-3 text-muted">{t}</li>
-          ))}
-        </ul>
-        )}
-        <div className="mt-6 flex flex-wrap gap-2">
-          {e.brochureUrl && <Button asChild><a href={e.brochureUrl} target="_blank" rel="noopener noreferrer"><FileText aria-hidden />Open brochure</a></Button>}
-          <Button asChild variant="secondary"><a href={e.aicfUrl} target="_blank" rel="noopener noreferrer">AICF listing<ExternalLink aria-hidden /></a></Button>
+    <div className="space-y-8">
+      {paras.length > 0 ? (
+        <div className="max-w-[68ch] space-y-4 text-body leading-[1.7] sm:text-body-lg">
+          {paras.map((p, i) => <p key={i} className={i === 0 ? "text-fg" : "text-muted"}>{p}</p>)}
         </div>
-      </section>
-      {mapQ && !empty && (
-        <Section id="venue" title="Where">
-          <p className="text-body font-medium">{location(e)}</p>
-          {e.venueName && <p className="text-body text-muted">{e.venueName}</p>}
-          <div className="mt-4 overflow-hidden rounded-md border border-border bg-surface-2">
-            <iframe title={`Map of ${location(e)}`} src={mapsEmbedUrl(mapQ)} loading="lazy" referrerPolicy="no-referrer-when-downgrade" className="block h-64 w-full" />
-          </div>
-        </Section>
+      ) : null}
+      {!rich && <SparseNotice e={e} />}
+      {facts.length > 0 && (
+        <dl className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2">
+          {facts.map(([k, v]) => (
+            <div key={k} className="bg-surface px-4 py-3.5">
+              <dt className="text-label font-medium uppercase tracking-[0.08em] text-muted">{k}</dt>
+              <dd className="mt-1 text-ui">{v}</dd>
+            </div>
+          ))}
+          {facts.length % 2 === 1 && <div className="hidden bg-surface sm:block" aria-hidden />}
+        </dl>
       )}
-    </>
+    </div>
   );
 }
 
-function Loading() {
+function BodySkeleton() {
   return (
-    <div className="mx-auto max-w-[1200px] space-y-4 px-4 py-10 sm:px-6 lg:px-8" role="status" aria-label="Loading tournament">
-      <Skeleton className="h-4 w-28" />
-      <Skeleton className="h-10 w-3/4" />
-      <Skeleton className="h-5 w-1/2" />
-      <div className="grid gap-10 pt-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Skeleton className="h-80 w-full rounded-md" />
-        <Skeleton className="h-80 w-full rounded-md" />
+    <div className="mt-10 space-y-10" role="status" aria-label="Loading tournament details">
+      <Skeleton className="h-[92px] w-full rounded-lg" />
+      <div className="space-y-3">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-4 w-full max-w-[68ch]" />
+        <Skeleton className="h-4 w-11/12 max-w-[64ch]" />
+        <Skeleton className="h-4 w-3/4 max-w-[52ch]" />
       </div>
     </div>
   );
 }
+
+const Container = ({ children }: { children: React.ReactNode }) => <article className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">{children}</article>;
 
 export default function EventPage() {
   const { eventCode = "" } = useParams();
-  const { data: e, isPending, isError, error, refetch } = useEvent(eventCode);
-  const d = e?.details ?? null;
-  useDocumentMeta(
-    e ? displayName(e.name) : undefined,
-    e ? (d?.tagline ?? d?.summary?.split("\n")[0] ?? `${e.name}, ${formatDateRange(e.startDate, e.endDate, true)}, ${location(e)}.`) : undefined
-  );
+  const { data, isPending, isError, error, refetch } = useEvent(eventCode);
+  const cached = useCachedSummary(eventCode);
+  const e = data ?? (cached ? preview(cached) : undefined);
+  const [actionsRef, scrolledPast] = useScrolledPast(64);
+  const sections = data ? sectionsFor(data) : [];
+  const active = useScrollSpy(sections.map((s) => s.id), 180);
+  useDocumentMeta(e ? displayName(e.name) : undefined, e ? describe(e) : undefined);
 
-  if (isPending) return <Loading />;
-  if (isError) {
+  if (isError && !data) {
     if (error instanceof ApiError && error.status === 404) return <NotFoundPage what="tournament" />;
     return <div className="mx-auto max-w-xl px-4 py-16"><ErrorState message={error.message} onRetry={() => refetch()} /></div>;
   }
+  if (!e) {
+    return (
+      <Container>
+        <div className="space-y-4 pt-8" role="status" aria-label="Loading tournament">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="mt-8 h-6 w-48" />
+          <Skeleton className="h-11 w-4/5 max-w-[26ch]" />
+          <Skeleton className="h-5 w-1/2" />
+        </div>
+        <BodySkeleton />
+      </Container>
+    );
+  }
 
-  const f = deriveFacts(e, e);
-  const sections = sectionsFor(e, d);
-  const rich = !!d && sections.some((s) => s.id !== "venue" && s.id !== "about");
   const name = displayName(e.name);
-
-  const rows: { label: string; fact: Fact }[] = [
-    { label: "Dates", fact: { value: formatDateRange(e.startDate, e.endDate, true), note: f.when.note } },
-    { label: "Where", fact: { value: location(e), note: d?.venue.name ?? e.venueName ?? undefined } },
-  ];
-  if (f.timeControl) rows.push({ label: "Time control", fact: f.timeControl });
-  if (f.fide != null) rows.push({ label: "Rating", fact: { value: f.fide ? "FIDE rated" : "Not FIDE rated" } });
-  if (f.prize) rows.push({ label: "Prize fund", fact: f.prize });
-  if (f.fee) rows.push({ label: "Entry", fact: f.fee.title ? { ...f.fee, note: f.fee.title } : f.fee });
-  if (f.registration) rows.push({ label: "Registration", fact: f.registration });
+  const d = data?.details ?? null;
 
   return (
-    <article className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 pt-6 text-small text-muted">
-        <Link
-          to="/"
-          onClick={(ev) => { if (window.history.state?.idx > 0) { ev.preventDefault(); window.history.back(); } }}
-          className="inline-flex items-center gap-1.5 rounded-sm hover:text-fg"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />All tournaments
-        </Link>
-        {e.state && (
-          <>
-            <span className="text-subtle" aria-hidden>/</span>
-            <Link to={`/?state=${encodeURIComponent(e.state)}`} className="rounded-sm hover:text-fg">{e.state}</Link>
-          </>
-        )}
-      </nav>
-
-
-      <div className="grid gap-x-14 gap-y-8 pt-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <header className="border-b border-border pb-8 lg:col-start-1 lg:row-start-1">
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            <StatusBadge status={f.status} />
-            {f.fide && <Badge tone="outline">FIDE rated</Badge>}
-            {f.registration?.tone === "warn" && <Badge tone="warn">Registration closes {f.registration.note}</Badge>}
-          </div>
-          <h1 className="max-w-[24ch] text-[30px] font-semibold leading-[1.1] tracking-h1 sm:text-h1">{name}</h1>
-          {d?.tagline && <p className="mt-3 max-w-[64ch] text-body-lg text-muted">{d.tagline}</p>}
-          <p className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-ui">
-            <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4 text-subtle" aria-hidden />{formatDateRange(e.startDate, e.endDate, true)}</span>
-            <span className="inline-flex items-center gap-2"><MapPin className="h-4 w-4 text-subtle" aria-hidden />{location(e)}</span>
-          </p>
-        </header>
-        <aside className="lg:col-start-2 lg:row-span-2 lg:row-start-1" aria-label="Key facts and actions">
-          <div className="space-y-5 lg:sticky lg:top-[calc(var(--toolbar-h)+24px)]">
-            <div className="rounded-lg border border-border bg-surface p-5 shadow-e1">
-              <FactRows rows={rows} />
-              <div className="mt-5 border-t border-border pt-5">
-                <EventActions e={e} size="lg" full />
-              </div>
-              <div className="mt-2 flex gap-2 [&>*]:flex-1">
-                <ShareButton title={name} />
-                <Button asChild variant="secondary"><a href={e.aicfUrl} target="_blank" rel="noopener noreferrer">AICF<ExternalLink aria-hidden /></a></Button>
-              </div>
+    <Container>
+      <EventHeader e={e} name={name} tagline={d?.tagline ?? e.tagline} actionsRef={actionsRef} />
+      {isPending || !data ? (
+        <BodySkeleton />
+      ) : (
+        <>
+          <Reveal className="mt-10 sm:mt-12" y={10}>
+            <KeyFacts e={data} />
+          </Reveal>
+          <div className="mt-8 grid gap-14 sm:mt-10 lg:grid-cols-[minmax(0,1fr)_200px] xl:gap-20">
+            <div className="min-w-0">
+              <Section id="overview" title="Overview">
+                <Overview e={data} />
+              </Section>
+              {sections.some((s) => s.id === "prizes") && d && (
+                <Section id="prizes" title="Prizes" meta={prizeMeta(d.prizes)}>
+                  <PrizesBody prizes={d.prizes} />
+                </Section>
+              )}
+              {sections.some((s) => s.id === "entry") && d && (
+                <Section id="entry" title="Entry fees">
+                  <EntryBody e={data} d={d} />
+                </Section>
+              )}
+              {sections.some((s) => s.id === "schedule") && d && (
+                <Section id="schedule" title="Schedule" meta={`${d.schedule.length} items`}>
+                  <ScheduleBody e={data} items={d.schedule} />
+                </Section>
+              )}
+              {sections.some((s) => s.id === "venue") && (
+                <Section id="venue" title="Venue">
+                  <VenueBody e={data} d={d} />
+                </Section>
+              )}
+              {sections.some((s) => s.id === "eligibility") && d && (
+                <Section id="eligibility" title="Eligibility and categories">
+                  <EligibilityBody d={d} />
+                </Section>
+              )}
+              {sections.some((s) => s.id === "contacts") && d && (
+                <Section id="contacts" title="Organiser and contacts">
+                  <ContactsBody d={d} />
+                </Section>
+              )}
+              <Section id="more" title="More tournaments">
+                <MoreTournaments e={data} />
+              </Section>
+              <p className="border-t border-border pt-6 text-small text-muted">
+                {data.extractedAt
+                  ? <>Summarised automatically from the official brochure on {formatDate(data.extractedAt.slice(0, 10))}. Always confirm details with the organiser before you travel.</>
+                  : <>Listing from the All India Chess Federation calendar. Confirm details with the organiser before you travel.</>}
+              </p>
             </div>
-            {sections.length >= 3 && (
-              <nav aria-label="On this page" className="hidden px-1 lg:block">
-                <p className="mb-2 text-small text-muted">On this page</p>
-                <ul className="space-y-0.5 border-l border-border">
-                  {sections.map((s) => (
-                    <li key={s.id}>
-                      <a href={`#${s.id}`} className="-ml-px block border-l border-transparent py-1 pl-3 text-ui text-muted transition-colors hover:border-fg hover:text-fg">{s.title}</a>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            )}
+            <aside className="hidden lg:block" aria-label="Page navigation">
+              <div className="sticky top-[calc(var(--toolbar-h)+96px)]">
+                <SectionNav sections={sections} active={active} />
+                <div className="mt-8 space-y-1.5 border-t border-border pt-5 text-small">
+                  <p className="text-label font-medium uppercase tracking-[0.08em] text-muted">Sources</p>
+                  {data.brochureUrl && <a href={data.brochureUrl} target="_blank" rel="noopener noreferrer" className="block text-muted hover:text-fg">Brochure PDF ↗</a>}
+                  <a href={data.aicfUrl} target="_blank" rel="noopener noreferrer" className="block text-muted hover:text-fg">AICF calendar ↗</a>
+                  <p className="font-mono text-label text-subtle">#{data.eventCode}</p>
+                </div>
+              </div>
+            </aside>
           </div>
-        </aside>
-
-        <div className="min-w-0 lg:col-start-1 lg:row-start-2">
-          {d && rich ? <Main e={e} d={d} /> : d ? <><Pending e={e} empty /><div className="mt-8"><Main e={e} d={d} /></div></> : <Pending e={e} empty={false} />}
-          {e.extractedAt && (
-            <p className="mt-10 border-t border-border pt-5 text-small text-muted">
-              Summarised from the official brochure on {formatDate(e.extractedAt.slice(0, 10))}. Always confirm details with the organiser.{" "}
-              <a href={calendarUrl(e.eventCode)} download className="text-fg underline decoration-border-strong underline-offset-2">Add to calendar</a>
-            </p>
-          )}
-        </div>
-      </div>
-    </article>
+          {/* room for the mobile bottom action bar */}
+          <div className="h-16 md:hidden" aria-hidden />
+          <CondensedBar e={data} name={name} show={scrolledPast} />
+        </>
+      )}
+    </Container>
   );
 }
-

@@ -1,320 +1,161 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
-import { useNavigate } from "react-router-dom";
-import { ActiveFilters } from "@/components/ActiveFilters";
-import { EventRow } from "@/components/event/EventRow";
-import { EmptyState, ErrorState, RowSkeletons } from "@/components/States";
-import { Toolbar } from "@/components/Toolbar";
-import { Button } from "@/components/ui/button";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { Hero, type HeroFigures } from "@/components/hero/Hero";
+import { Timeline } from "@/components/listing/Timeline";
+import { computeFacets } from "@/components/filters/facets";
+import { ActiveFilters, FilterBar, QuickStrip } from "@/components/filters/FilterBar";
+import { FilterSheet } from "@/components/filters/FilterSheet";
+import { EmptyState, ErrorState, RowSkeletons, type Relaxation } from "@/components/States";
+import { NumberTicker } from "@/components/ui/NumberTicker";
+import { useCatalog } from "@/hooks/useCatalog";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { useEventsInfinite, useStats } from "@/hooks/queries";
-import { registrationOpen } from "@/lib/eventFacts";
-import { hasActiveFilters, SORTS, toQuery, useFilters, type Filters } from "@/lib/filters";
-import { formatInr, formatInrFull, formatMonthLabel, formatWeekdayShort, pluralize, todayIST } from "@/lib/format";
-import type { EventSummary } from "@/types/event";
-import { cn } from "@/lib/utils";
+import { useSearchText } from "@/hooks/useSearchText";
+import { getUi, setUi, useUi } from "@/hooks/useDiscoverUi";
+import { activeChips, applyFilters, serialize, SORTS, sortEvents, useFilters, type Filters, type SortKey } from "@/lib/filters";
+import type { LatLng } from "@/lib/geo";
+import { todayIST } from "@/lib/format";
 
-const HeroBoard = lazy(() => import("@/components/HeroBoard"));
-// Overlays and the calendar load on first use to keep the first paint light.
-const EventDrawer = lazy(() => import("@/components/event/EventDrawer").then((m) => ({ default: m.EventDrawer })));
-const FilterSheet = lazy(() => import("@/components/FilterSheet").then((m) => ({ default: m.FilterSheet })));
-const CalendarView = lazy(() => import("@/components/CalendarView").then((m) => ({ default: m.CalendarView })));
-
-/* ───────────────────────── hero ───────────────────────── */
-
-function Stat({ value, label, title }: { value: string; label: string; title?: string }) {
-  return (
-    <div className="min-w-0 sm:flex-1 sm:border-l sm:border-border sm:pl-4 sm:first:border-l-0 sm:first:pl-0">
-      <dd className="text-[24px] font-medium leading-none tracking-h1 sm:text-stat" title={title}>{value}</dd>
-      <dt className="mt-1.5 text-small text-muted">{label}</dt>
-    </div>
-  );
-}
-
-function Hero() {
-  const ref = useRef<HTMLElement>(null);
-  const reduce = useReducedMotion();
-  const { data: s } = useStats();
-  // The banner recedes as it scrolls away; by the time its bottom edge leaves, it has faded out entirely.
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
-  const opacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
-  const y = useTransform(scrollYProgress, [0, 1], [0, -40]);
-  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.97]);
-  const ahead = s ? s.upcoming + s.ongoing : null;
-
-  return (
-    <section ref={ref} className="relative overflow-hidden" aria-labelledby="hero-title">
-      <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden />
-      <motion.div
-        style={reduce ? undefined : { opacity, y, scale }}
-        className="relative mx-auto grid max-w-[1200px] origin-top items-center gap-10 px-4 pb-10 pt-6 sm:px-6 sm:pt-10 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,27rem)] lg:gap-16 lg:px-8 lg:pb-14 lg:pt-14"
-      >
-        <div>
-          {s && s.ongoing > 0 && (
-            <p className="mb-5 inline-flex h-7 items-center gap-2 rounded-full border border-border bg-surface px-3 text-small text-muted shadow-e1">
-              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
-              {pluralize(s.ongoing, "tournament")} being played right now
-            </p>
-          )}
-          <h1 id="hero-title" className="max-w-[14ch] text-[38px] font-semibold leading-[1.04] tracking-display sm:text-[48px] lg:text-display">
-            Every AICF tournament in India, organised.
-          </h1>
-          <p className="mt-5 max-w-[52ch] text-body-lg text-muted">
-            Dates, time controls, prize funds, entry fees and registration deadlines, read from each brochure and laid out side by side. Filter by city, format or budget, then register.
-          </p>
-          <dl className="mt-9 grid max-w-xl grid-cols-2 gap-x-4 gap-y-6 sm:flex sm:gap-0">
-            {s ? (
-              <>
-                <Stat value={String(ahead)} label="tournaments ahead" />
-                <Stat value={String(s.startingThisWeek)} label="start this week" />
-                {s.upcomingPrizePoolInr > 0 && <Stat value={formatInr(s.upcomingPrizePoolInr)} label="in prize funds" title={formatInrFull(s.upcomingPrizePoolInr)} />}
-                <Stat value={String(s.byState.length)} label="states and UTs" />
-              </>
-            ) : (
-              [0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-12 w-24 rounded-sm" aria-hidden />)
-            )}
-          </dl>
-        </div>
-        <figure className="mx-auto w-full max-w-[20rem] md:max-w-none">
-          <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-e2">
-            <Suspense fallback={<div className="skeleton aspect-[720/800] w-full" aria-hidden />}>
-              <HeroBoard still={!!reduce} />
-            </Suspense>
-          </div>
-          <figcaption className="sr-only">Aronian versus Anand, Wijk aan Zee 2013, replayed move by move. Anand won with Black.</figcaption>
-        </figure>
-      </motion.div>
-    </section>
-  );
-}
-
-/* ───────────────────────── listing ───────────────────────── */
-
-type Group = { key: string; title: string; items: EventSummary[]; days: { date: string; items: EventSummary[] }[] };
-
-function groupEvents(events: EventSummary[], today: string): Group[] {
-  const groups: Group[] = [];
-  const push = (key: string, title: string, e: EventSummary, day: string) => {
-    let g = groups.find((x) => x.key === key);
-    if (!g) groups.push((g = { key, title, items: [], days: [] }));
-    g.items.push(e);
-    const d = g.days[g.days.length - 1];
-    if (d && d.date === day) d.items.push(e);
-    else g.days.push({ date: day, items: [e] });
-  };
-  for (const e of events) {
-    if (e.startDate <= today && e.endDate >= today) push("now", "Happening now", e, e.startDate);
-    else push(e.startDate.slice(0, 7), formatMonthLabel(e.startDate.slice(0, 7)), e, e.startDate);
-  }
-  return groups;
-}
-
-function DayLabel({ date, today }: { date: string; today: string }) {
-  const n = +date.slice(8);
-  const isToday = date === today;
-  return (
-    <div className="mb-2 flex items-baseline gap-1.5 md:sticky md:mb-0 md:block md:self-start md:pt-3.5" style={{ top: "calc(var(--toolbar-h) + 56px)" }}>
-      <span className={cn("text-small font-medium md:block", isToday ? "text-accent" : "text-muted")}>{isToday ? "Today" : formatWeekdayShort(date)}</span>
-      <span className="text-small font-medium text-fg md:mt-0.5 md:block md:text-[24px] md:leading-none md:tracking-h1">
-        {n}
-        <span className="ml-1 md:hidden">{new Intl.DateTimeFormat("en-IN", { month: "short", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</span>
-      </span>
-    </div>
-  );
-}
-
-function SectionHeader({ g }: { g: Group }) {
-  const prize = g.items.reduce((a, e) => a + (e.totalPrizeInr ?? 0), 0);
-  return (
-    <div className="glass-bg sticky z-20 -mx-4 border-b border-border px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8" style={{ top: "var(--toolbar-h)" }}>
-      <h2 id={`g-${g.key}`} className="flex h-11 items-center gap-3">
-        <span className="flex items-center gap-2 text-[15px] font-semibold tracking-h3">
-          {g.key === "now" && <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />}
-          {g.title}
-        </span>
-        <span className="text-small text-muted">{pluralize(g.items.length, "tournament")}</span>
-        {prize > 0 && <span className="ml-auto text-small text-muted" title={formatInrFull(prize)}>{formatInr(prize)} in prizes</span>}
-      </h2>
-    </div>
-  );
-}
-
-function Results({ q, events, filters, update, clear, onOpen }: {
-  q: ReturnType<typeof useEventsInfinite>;
-  events: EventSummary[];
-  filters: Filters;
-  update: (p: Partial<Filters>) => void;
-  clear: () => void;
-  onOpen: (code: string) => void;
-}) {
-  const sentinel = useRef<HTMLDivElement>(null);
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
-  useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !hasNextPage) return;
-    const io = new IntersectionObserver((en) => { if (en[0].isIntersecting && !isFetchingNextPage) fetchNextPage(); }, { rootMargin: "600px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  const today = todayIST();
-  if (q.isError && !q.data) return <ErrorState message={(q.error as Error).message} onRetry={() => q.refetch()} />;
-  if (q.isPending) return <RowSkeletons />;
-
-  if (!events.length) {
-    const s: { label: string; onClick: () => void }[] = [];
-    if (filters.q) s.push({ label: "Clear search", onClick: () => update({ q: "" }) });
-    if (filters.regOpen) s.push({ label: "Include closed registration", onClick: () => update({ regOpen: false }) });
-    if (filters.from || filters.to) s.push({ label: "Any date", onClick: () => update({ from: undefined, to: undefined }) });
-    if (filters.minPrize) s.push({ label: "Any prize", onClick: () => update({ minPrize: undefined }) });
-    if (filters.maxFee) s.push({ label: "Any fee", onClick: () => update({ maxFee: undefined }) });
-    if (filters.state.length || filters.city.length) s.push({ label: "All locations", onClick: () => update({ state: [], city: [] }) });
-    if (filters.timeControl.length) s.push({ label: "Any time control", onClick: () => update({ timeControl: [] }) });
-    if (filters.fide) s.push({ label: "Include unrated", onClick: () => update({ fide: false }) });
-    if (filters.status.length !== 3) s.push({ label: "Include past events", onClick: () => update({ status: ["upcoming", "ongoing", "past"] }) });
-    return <EmptyState suggestions={s.slice(0, 4)} onClear={clear} />;
-  }
-
-  const chrono = filters.sort === "startDate";
-  return (
-    <div className={cn("transition-opacity", q.isPlaceholderData && "opacity-60")}>
-      {chrono ? (
-        groupEvents(events, today).map((g) => (
-          <section key={g.key} aria-labelledby={`g-${g.key}`} className="mb-8">
-            <SectionHeader g={g} />
-            <ol className="mt-3 space-y-4">
-              {g.days.map((d) => (
-                <li key={d.date} className="md:grid md:grid-cols-[3.5rem_minmax(0,1fr)] md:gap-4">
-                  {g.key === "now" ? <span className="hidden md:block" /> : <DayLabel date={d.date} today={today} />}
-                  <ul className="space-y-2">
-                    {d.items.map((e) => <li key={e.eventCode}><EventRow e={e} onOpen={onOpen} /></li>)}
-                  </ul>
-                </li>
-              ))}
-            </ol>
-          </section>
-        ))
-      ) : (
-        <ul className="space-y-2">
-          {events.map((e) => <li key={e.eventCode}><EventRow e={e} onOpen={onOpen} /></li>)}
-        </ul>
-      )}
-      <div ref={sentinel} className="mt-8 flex justify-center">
-        {hasNextPage ? (
-          <Button variant="secondary" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>{isFetchingNextPage ? "Loading…" : "Load more"}</Button>
-        ) : (
-          <p className="text-small text-muted">End of the list.</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ───────────────────────── page ───────────────────────── */
+/** Focus requests already served, so a remount doesn't steal focus again. */
+let servedFocus = 0;
 
 export default function DiscoverPage() {
   useDocumentMeta();
   const { filters, update, clear } = useFilters();
-  const navigate = useNavigate();
-  const [text, setText] = useState(filters.q);
-  const [sheet, setSheet] = useState(false);
-  const [pinned, setPinned] = useState(false);
-  const pinRef = useRef<HTMLDivElement>(null);
-  const openedHere = useRef(false);
-  const [usedSheet, setUsedSheet] = useState(false);
-  const [usedDrawer, setUsedDrawer] = useState(false);
-  if (sheet && !usedSheet) setUsedSheet(true);
-  if (filters.event && !usedDrawer) setUsedDrawer(true);
+  const f = useDeferredValue(filters);
+  const catalog = useCatalog(filters.past);
+  const today = todayIST();
+  const ctx = useMemo(() => ({ today }), [today]);
+  const [near, setNear] = useState<LatLng | null>(null);
+  const [text, setText] = useSearchText();
 
-  // URL -> input (back/forward, clear all): adjust state during render
-  const [seenQ, setSeenQ] = useState(filters.q);
-  if (seenQ !== filters.q) {
-    setSeenQ(filters.q);
-    setText(filters.q);
-  }
-  // input -> URL (debounced)
-  useEffect(() => {
-    if (text === filters.q) return;
-    const t = setTimeout(() => update({ q: text }), 250);
-    return () => clearTimeout(t);
-  }, [text, filters.q, update]);
+  const all = useMemo(() => catalog.data ?? [], [catalog.data]);
+  const results = useMemo(() => sortEvents(applyFilters(all, f, ctx), f.sort, today), [all, f, ctx, today]);
+  const facets = useMemo(() => computeFacets(all, filters, ctx), [all, filters, ctx]);
+  const atlasEvents = useMemo(() => results.filter((e) => e.endDate >= today), [results, today]);
 
-  // The toolbar is pinned once the zero-height marker above it has scrolled to the top edge.
+  const figures = useMemo<HeroFigures | null>(() => {
+    if (!catalog.data) return null;
+    const ahead = all.filter((e) => e.endDate >= today);
+    return {
+      ahead: ahead.length,
+      live: ahead.filter((e) => e.startDate <= today).length,
+      prize: ahead.reduce((a, e) => a + (e.totalPrizeInr ?? 0), 0),
+      cities: new Set(ahead.map((e) => e.city ?? e.state).filter(Boolean)).size,
+    };
+  }, [catalog.data, all, today]);
+
+  /* ── docking: the hero search hands over to the header once it scrolls under it ── */
+  const searchWrap = useRef<HTMLDivElement>(null);
+  const heroInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const el = pinRef.current;
+    const el = searchWrap.current;
     if (!el) return;
-    let raf = 0;
-    const check = () => { raf = 0; setPinned(el.getBoundingClientRect().top <= 0); };
-    const on = () => { if (!raf) raf = requestAnimationFrame(check); };
-    check();
-    window.addEventListener("scroll", on, { passive: true });
-    window.addEventListener("resize", on);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", on); window.removeEventListener("resize", on); };
+    const io = new IntersectionObserver(([en]) => setUi({ docked: !en.isIntersecting && en.boundingClientRect.top < 80 }), { rootMargin: "-56px 0px 0px 0px" });
+    io.observe(el);
+    return () => { io.disconnect(); setUi({ docked: false, sheetOpen: false }); };
   }, []);
 
-  const listMode = filters.view === "cards";
-  const q = useEventsInfinite(toQuery(filters, filters.regOpen ? { pageSize: 200 } : {}), listMode);
-  const events = useMemo(() => {
-    const all = q.data?.pages.flatMap((p) => p.data) ?? [];
-    return filters.regOpen ? all.filter((e) => registrationOpen(e)) : all;
-  }, [q.data, filters.regOpen]);
-  const total = filters.regOpen ? (q.hasNextPage ? undefined : events.length) : q.data?.pages[0]?.meta.total;
+  const focusTick = useUi((s) => s.focusTick);
+  useEffect(() => {
+    if (focusTick <= servedFocus) return;
+    servedFocus = focusTick;
+    if (!getUi().docked) heroInput.current?.focus({ preventScroll: false });
+  }, [focusTick]);
 
-  const openEvent = useCallback((code: string) => {
-    openedHere.current = true;
-    update({ event: code }, { push: true });
-  }, [update]);
-  const closeEvent = useCallback(() => {
-    if (openedHere.current) {
-      openedHere.current = false;
-      navigate(-1);
-    } else update({ event: undefined });
-  }, [navigate, update]);
+  /* ── keep the list in view when a filter changes deep in the page ── */
+  const listTop = useRef<HTMLDivElement>(null);
+  const key = serialize({ ...filters, q: "" }).toString();
+  const lastKey = useRef(key);
+  useEffect(() => {
+    if (lastKey.current === key) return;
+    lastKey.current = key;
+    const el = listTop.current;
+    if (!el) return;
+    const chrome = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--chrome-h")) || 56;
+    const top = el.getBoundingClientRect().top + window.scrollY - chrome;
+    if (window.scrollY > top + 4) window.scrollTo({ top, behavior: "instant" as ScrollBehavior });
+  }, [key]);
+  const revealList = useCallback(() => {
+    const el = listTop.current;
+    if (!el) return;
+    const chrome = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--chrome-h")) || 56;
+    const top = el.getBoundingClientRect().top + window.scrollY - chrome;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (window.scrollY < top) window.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+  }, []);
 
-  const scrollToList = () => {
-    const el = pinRef.current;
-    if (el && el.getBoundingClientRect().top < 0) window.scrollTo({ top: el.offsetTop, behavior: "instant" as ScrollBehavior });
-  };
-  const updateAndReveal = useCallback((p: Partial<Filters>) => { update(p); requestAnimationFrame(scrollToList); }, [update]);
+  const pick = useCallback((p: { city: string | null; state: string | null }) => {
+    if (p.city) update({ city: [p.city], state: [] });
+    else if (p.state) update({ state: [p.state], city: [] });
+    requestAnimationFrame(revealList);
+  }, [update, revealList]);
+
+  const sheetOpen = useUi((s) => s.sheetOpen);
+  const setSheet = useCallback((v: boolean) => setUi({ sheetOpen: v }), []);
+
+  const relaxations: Relaxation[] = useMemo(() => {
+    if (results.length) return [];
+    return activeChips(f)
+      .map((c) => ({ label: `Remove “${c.label.replace(/[“”]/g, "")}”`, count: applyFilters(all, { ...f, ...c.patch } as Filters, ctx).length, onClick: () => update(c.patch) }))
+      .filter((r) => r.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+  }, [results.length, f, all, ctx, update]);
+
+  const sortLabel = SORTS.find((s) => s.value === f.sort)!.label;
+  const resultKey = serialize(f).toString();
+
+  let body: React.ReactNode;
+  if (catalog.isError && !catalog.data) body = <ErrorState message={(catalog.error as Error).message} onRetry={() => catalog.refetch()} />;
+  else if (!catalog.data) body = <RowSkeletons />;
+  else if (!results.length)
+    body = (
+      <EmptyState
+        title={f.q && activeChips(f).length === 1 ? `Nothing matches “${f.q}”` : "No tournaments match"}
+        suggestions={relaxations}
+        onClear={clear}
+      />
+    );
+  else body = <Timeline events={results} grouped={f.sort === "soon"} resultKey={resultKey} flatTitle={`Sorted by ${sortLabel.toLowerCase()}`} />;
 
   return (
     <>
-      <Hero />
-      <div ref={pinRef} aria-hidden />
-      <Toolbar filters={filters} update={updateAndReveal} text={text} setText={setText} pinned={pinned} onOpenFilters={() => setSheet(true)} />
+      <Hero
+        ref={heroInput}
+        searchWrapRef={searchWrap}
+        figures={figures}
+        atlasEvents={atlasEvents}
+        q={text}
+        setQ={setText}
+        onSubmit={() => { heroInput.current?.blur(); revealList(); }}
+        onPick={pick}
+      />
+      <FilterBar f={filters} update={update} facets={facets} near={near} setNear={setNear} onMore={() => setSheet(true)} />
 
       <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-4 pt-5">
-          <p className="text-ui text-muted" role="status" aria-live="polite">
-            {listMode ? (total != null ? <><strong className="font-semibold text-fg">{total.toLocaleString("en-IN")}</strong> {total === 1 ? "tournament" : "tournaments"}</> : q.isPending ? "Loading…" : `${events.length}+ tournaments`) : "Calendar"}
+        <QuickStrip f={filters} update={update} facets={facets} onMore={() => setSheet(true)} />
+        <ActiveFilters f={filters} update={update} clear={clear} />
+        <div className="flex items-center justify-between gap-3 pb-1 lg:hidden">
+          <p className="text-ui text-muted" aria-live="polite">
+            <NumberTicker value={facets.total} duration={0.5} className="font-semibold text-fg" /> {facets.total === 1 ? "tournament" : "tournaments"}
           </p>
-          {hasActiveFilters(filters) && <ActiveFilters f={filters} update={update} clear={clear} />}
-          {listMode && (
-            <label className="ml-auto flex items-center gap-2 text-small text-muted">
-              Sort
-              <select
-                className="h-8 rounded-sm border border-border-strong bg-surface px-2 text-ui text-fg"
-                value={filters.sort}
-                onChange={(e) => update({ sort: e.target.value })}
-              >
-                {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </label>
-          )}
+          <label className="relative flex items-center text-small text-muted">
+            <span className="sr-only">Sort by</span>
+            <select
+              value={filters.sort}
+              onChange={(e) => update({ sort: e.target.value as SortKey })}
+              className="h-10 appearance-none rounded-sm bg-transparent pl-2 pr-7 text-right text-ui font-medium text-fg"
+            >
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1.5 h-4 w-4 text-subtle" aria-hidden />
+          </label>
         </div>
-        {listMode ? (
-          <Results q={q} events={events} filters={filters} update={update} clear={clear} onOpen={openEvent} />
-        ) : (
-          <Suspense fallback={<div className="skeleton h-96 w-full rounded-md" aria-hidden />}>
-            <CalendarView filters={filters} update={update} onOpen={openEvent} />
-          </Suspense>
-        )}
+        <div ref={listTop} className="scroll-mt-0" />
+        <div className="lg:pt-2" style={{ opacity: f !== filters ? 0.7 : 1, transition: "opacity 120ms" }}>{body}</div>
       </div>
 
-      <Suspense fallback={null}>
-        {usedSheet && <FilterSheet open={sheet} onOpenChange={setSheet} filters={filters} update={update} clear={clear} count={listMode ? total : undefined} />}
-        {usedDrawer && <EventDrawer code={filters.event} summary={events.find((e) => e.eventCode === filters.event)} onClose={closeEvent} />}
-      </Suspense>
+      <FilterSheet open={sheetOpen} onOpenChange={setSheet} f={filters} update={update} clear={clear} facets={facets} near={near} setNear={setNear} />
     </>
   );
 }

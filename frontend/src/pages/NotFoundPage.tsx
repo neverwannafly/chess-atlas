@@ -15,7 +15,7 @@ export default function NotFoundPage({ what = "page" }: { what?: string }) {
         </p>
         <div className="mt-7 flex flex-wrap gap-2">
           <Button asChild size="lg"><Link to="/">Browse tournaments</Link></Button>
-          <Button asChild size="lg" variant="secondary"><Link to="/stats">See insights</Link></Button>
+          <Button asChild size="lg" variant="secondary"><Link to="/insights">See insights</Link></Button>
         </div>
       </div>
       <div className="hidden grid-cols-4 overflow-hidden rounded-lg border border-border shadow-e2 md:grid" aria-hidden>

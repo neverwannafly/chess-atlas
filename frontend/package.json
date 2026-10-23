@@ -12,7 +12,6 @@
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.4",
-    "@remotion/player": "4.0.537",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.90.15",
     "class-variance-authority": "^0.7.1",
@@ -23,7 +22,6 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.11.0",
-    "remotion": "4.0.537",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18"
   },
