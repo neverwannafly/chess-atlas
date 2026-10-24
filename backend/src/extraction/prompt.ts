@@ -39,6 +39,22 @@ FIELD GUIDANCE
 export interface PromptContext {
   name?: string;
   startDate?: string;
+  endDate?: string;
+  /** Other directory events that share this brochure (festival sections). */
+  siblings?: { name: string; startDate: string; endDate: string }[];
+}
+
+function sharedBrochureRules(ctx: PromptContext): string {
+  const others = (ctx.siblings ?? []).map((s) => `- ${s.name} (${s.startDate} to ${s.endDate})`).join("\n");
+  return `SHARED BROCHURE
+This brochure covers several separate events (sections) that the directory lists individually. The other events using this same brochure are:
+${others}
+Extract ONLY the target event: "${ctx.name}" (${ctx.startDate}${ctx.endDate ? ` to ${ctx.endDate}` : ""}). Find its section by category letter, rating limit, format (rapid/blitz/classical) or dates, and take from that section only: dates and schedule, time control, rounds, eligibility, entry fees, prize fund and prizes, rating/age categories, registration deadline.
+- timeControl.type describes the target event alone; do not use "Mixed" just because other sections have a different time control.
+- prizes.totalInr: the target section's own total if stated. Use a festival-wide total only if the brochure gives no per-section total, and then say so in prizes.notes.
+- Information common to all sections (venue, organiser, chief arbiter, contacts, accommodation, registration link) may be used.
+- summary and tagline describe the target event; you may mention in one sentence that it is part of a larger festival.
+`;
 }
 
 export function buildPrompt(text: string | null, ctx: PromptContext = {}, opts: { pdfFile?: string; errors?: string } = {}): string {
@@ -46,7 +62,9 @@ export function buildPrompt(text: string | null, ctx: PromptContext = {}, opts: 
   const known: string[] = [];
   if (ctx.name) known.push(`Event name (from directory listing): ${ctx.name}`);
   if (ctx.startDate) known.push(`Event start date (from directory listing): ${ctx.startDate}`);
+  if (ctx.endDate) known.push(`Event end date (from directory listing): ${ctx.endDate}`);
   if (known.length) lines.push("CONTEXT\n" + known.join("\n") + "\n");
+  if (ctx.siblings?.length) lines.push(sharedBrochureRules(ctx));
 
   if (opts.pdfFile) {
     lines.push(

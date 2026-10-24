@@ -3,7 +3,7 @@ import { parsePlace } from "../lib/place.js";
 import { addDays, todayIST } from "../lib/dates.js";
 import type {
   BrochureExtraction, EventDetail, EventStatus, EventSummary, ExtractionStatus, FacetCount,
-  QueueItem, ScrapedEvent, Stats, TimeControlType,
+  QueueItem, QueueSibling, ScrapedEvent, Stats, TimeControlType,
 } from "../types/event.js";
 
 export const AICF_URL = "https://aicf.in/all-events/";
@@ -252,14 +252,28 @@ export function getExtractionQueue(limit: number, force: boolean): QueueItem[] {
          OR (extractionStatus = 'failed' AND extractionAttempts < ${MAX_ATTEMPTS} AND (lastAttemptAt IS NULL OR lastAttemptAt <= @cutoff)))`;
   const rows = db
     .prepare(
-      `SELECT eventCode, name, brochureUrl, startDate, extractionAttempts FROM events WHERE ${where}
+      `SELECT eventCode, name, brochureUrl, startDate, endDate, extractionAttempts FROM events WHERE ${where}
        ORDER BY (endDate < @today) ASC,
                 CASE WHEN endDate >= @today THEN startDate END ASC,
                 startDate DESC
        LIMIT @limit`,
     )
-    .all({ today, cutoff, limit }) as { eventCode: string; name: string; brochureUrl: string; startDate: string; extractionAttempts: number }[];
-  return rows.map((r) => ({ eventCode: r.eventCode, name: r.name, brochureUrl: r.brochureUrl, startDate: r.startDate, attempts: r.extractionAttempts }));
+    .all({ today, cutoff, limit }) as { eventCode: string; name: string; brochureUrl: string; startDate: string; endDate: string; extractionAttempts: number }[];
+
+  // Festivals often publish one brochure for several AICF events (Category A/B/C,
+  // rapid + blitz). The worker needs the other events to extract only its own section.
+  const siblingStmt = db.prepare(
+    "SELECT eventCode, name, startDate, endDate FROM events WHERE brochureUrl = ? AND eventCode <> ? ORDER BY startDate, eventCode",
+  );
+  return rows.map((r) => ({
+    eventCode: r.eventCode,
+    name: r.name,
+    brochureUrl: r.brochureUrl,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    attempts: r.extractionAttempts,
+    siblings: siblingStmt.all(r.brochureUrl, r.eventCode) as QueueSibling[],
+  }));
 }
 
 // ---------------------------------------------------------------- listing

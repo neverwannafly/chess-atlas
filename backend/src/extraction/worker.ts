@@ -2,7 +2,7 @@
 /**
  * Extraction worker. See README.md.
  *   tsx src/extraction/worker.ts [--api URL] [--token T] [--limit N] [--concurrency N] [--force]
- *        [--model M] [--event CODE] [--dry-run] [--out DIR] [--url PDF_URL ...]
+ *        [--model M] [--event CODE] [--shared-only] [--dry-run] [--out DIR] [--url PDF_URL ...]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -10,11 +10,13 @@ import { fileURLToPath } from "node:url";
 import type { BrochureExtraction, ExtractionSubmission, QueueItem } from "../types/event.js";
 import { DEFAULT_MODEL, runAgy } from "./agy.js";
 import { PdfError, downloadPdf, processPdfBytes, sha256 } from "./pdf.js";
-import { buildPrompt } from "./prompt.js";
+import { buildPrompt, type PromptContext } from "./prompt.js";
 import { brochureExtractionSchema, normalizeExtraction } from "./schema.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PROMPT_VERSION = "v2"; // bump to invalidate cached LLM results
+// Results for one section of a shared (multi-event) brochure; cached per event, not per PDF.
+const SCOPED_PROMPT_VERSION = "v3-scoped";
 
 interface Opts {
   api: string;
@@ -24,6 +26,7 @@ interface Opts {
   force: boolean;
   model: string;
   event: string | null;
+  sharedOnly: boolean;
   dryRun: boolean;
   out: string;
   urls: string[];
@@ -38,6 +41,7 @@ function parseArgs(argv: string[]): Opts {
     force: false,
     model: DEFAULT_MODEL,
     event: null,
+    sharedOnly: false,
     dryRun: false,
     out: resolve(here, "../../data/extraction-cache"),
     urls: [],
@@ -55,11 +59,12 @@ function parseArgs(argv: string[]): Opts {
     else if (a === "--force") o.force = true;
     else if (a === "--model") o.model = need(++i);
     else if (a === "--event") o.event = need(++i);
+    else if (a === "--shared-only") o.sharedOnly = true;
     else if (a === "--dry-run") o.dryRun = true;
     else if (a === "--out") o.out = resolve(need(++i));
     else if (a === "--url") o.urls.push(...need(++i).split(",").filter(Boolean));
     else if (a === "--help" || a === "-h") {
-      console.log("usage: tsx src/extraction/worker.ts [--api URL] [--token T] [--limit N] [--concurrency N] [--force] [--model M] [--event CODE] [--dry-run] [--out DIR] [--url PDF_URL]");
+      console.log("usage: tsx src/extraction/worker.ts [--api URL] [--token T] [--limit N] [--concurrency N] [--force] [--model M] [--event CODE] [--shared-only] [--dry-run] [--out DIR] [--url PDF_URL]");
       process.exit(0);
     } else throw new Error(`unknown argument ${a}`);
   }
@@ -92,20 +97,22 @@ function formatIssues(err: import("zod").ZodError): string {
 /** download → text → agy → validate (one repair retry) */
 export async function extractBrochure(
   url: string,
-  ctx: { name?: string; startDate?: string },
+  ctx: PromptContext & { eventCode?: string },
   o: Pick<Opts, "model" | "out">,
 ): Promise<ExtractOutcome> {
   mkdirSync(o.out, { recursive: true });
   const bytes = await downloadPdf(url);
   const hash = sha256(bytes);
   const pdfPath = join(o.out, `${hash}.pdf`);
-  const resPath = join(o.out, `${hash}.json`);
+  const scoped = !!ctx.siblings?.length && !!ctx.eventCode;
+  const version = scoped ? SCOPED_PROMPT_VERSION : PROMPT_VERSION;
+  const resPath = join(o.out, scoped ? `${hash}.${ctx.eventCode}.json` : `${hash}.json`);
   if (!existsSync(pdfPath)) writeFileSync(pdfPath, bytes);
 
   if (existsSync(resPath)) {
     try {
       const c = JSON.parse(readFileSync(resPath, "utf8")) as Cached;
-      if (c.model === o.model && c.promptVersion === PROMPT_VERSION) {
+      if (c.model === o.model && c.promptVersion === version) {
         return { extraction: c.extraction, sourceHash: hash, cached: true, tokens: 0, seconds: 0, mode: "text" };
       }
     } catch {}
@@ -132,7 +139,7 @@ export async function extractBrochure(
     const parsed = brochureExtractionSchema.safeParse(normalizeExtraction(r.output));
     if (parsed.success) {
       const extraction = parsed.data as BrochureExtraction;
-      writeFileSync(resPath, JSON.stringify({ model: o.model, promptVersion: PROMPT_VERSION, extraction } satisfies Cached, null, 2));
+      writeFileSync(resPath, JSON.stringify({ model: o.model, promptVersion: version, extraction } satisfies Cached, null, 2));
       return { extraction, sourceHash: hash, cached: false, tokens, seconds, mode };
     }
     errors = formatIssues(parsed.error);
@@ -198,6 +205,7 @@ async function main() {
       process.exit(2);
     }
     if (o.event) queue = queue.filter((x) => x.eventCode === o.event);
+    if (o.sharedOnly) queue = queue.filter((x) => x.siblings?.length);
     queue = queue.slice(0, o.limit);
   }
 
@@ -208,7 +216,11 @@ async function main() {
   await pool(queue, o.concurrency, async (item, i) => {
     const tag = `(${i + 1}/${queue.length}) ${item.eventCode}`;
     try {
-      const r = await extractBrochure(item.brochureUrl, { name: item.name, startDate: item.startDate || undefined }, o);
+      const r = await extractBrochure(
+        item.brochureUrl,
+        { eventCode: item.eventCode, name: item.name, startDate: item.startDate || undefined, endDate: item.endDate, siblings: item.siblings },
+        o,
+      );
       stat.tokens += r.tokens;
       if (!r.cached) {
         stat.seconds += r.seconds;

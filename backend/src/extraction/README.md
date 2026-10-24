@@ -25,7 +25,7 @@ CHESSATLAS_API_URL=https://<your-app> ADMIN_TOKEN=... \
 
 `--api`, `--token` (env `CHESSATLAS_API_URL`, `ADMIN_TOKEN`), `--limit 20`, `--concurrency 3`,
 `--force` (re-extract everything with a brochure), `--model gemini-3.8-flash-medium`,
-`--event <code>`, `--dry-run` (print JSON, no PUT/failure POST), `--out <dir>`
+`--event <code>`, `--shared-only` (only events whose brochure is shared with other events), `--dry-run` (print JSON, no PUT/failure POST), `--out <dir>`
 (cache, default `backend/data/extraction-cache/`), `--url <pdf>[,<pdf>]` (extract
 URLs directly, implies dry-run; no API needed).
 
@@ -40,3 +40,7 @@ version in `--out`, so unchanged PDFs never hit the LLM again. Failures POST a s
 
 Keep `schema.ts` and `brochure.schema.json` in sync: edit `gen-schema.ts`, then
 `npx tsx src/extraction/gen-schema.ts`. Bump `PROMPT_VERSION` in `worker.ts` after prompt changes.
+
+Festival brochures often cover several AICF events (Category A/B/C, rapid + blitz). The queue
+lists each item's `siblings` (events with the same brochure URL); for those the prompt targets the
+item's own section and the result is cached per event (`<sha256>.<eventCode>.json`).

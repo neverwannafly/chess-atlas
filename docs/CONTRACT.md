@@ -90,6 +90,8 @@ Header `Authorization: Bearer ${ADMIN_TOKEN}`. If `ADMIN_TOKEN` is unset, admin 
 - `POST /api/admin/scrape` → runs scraper now → `{ data: { scraped, inserted, updated } }`
 - `GET /api/admin/extraction-queue?limit=50&force=false` → `{ data: QueueItem[] }`
   pending + retryable failed events, upcoming/ongoing first, soonest first. `force=true` returns every event with a brochure.
+  Each item carries `siblings`: other events with the same brochure URL (festival sections), so the
+  worker extracts only the item's own section.
 - `PUT /api/admin/events/:eventCode/extraction` body `ExtractionSubmission` → validates `extraction`
   against the schema (zod), stores it, sets status `done`, recomputes denormalized columns + FTS → `{ data: EventDetail }`.
   400 with zod issues on invalid payload.

@@ -106,12 +106,22 @@ export interface Paginated<T> {
   meta: { total: number; page: number; pageSize: number; pageCount: number };
 }
 
+export interface QueueSibling {
+  eventCode: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
 export interface QueueItem {
   eventCode: string;
   name: string;
   brochureUrl: string;
   startDate: string;
+  endDate?: string;
   attempts: number;
+  /** Other events listed with the same brochure URL (festival sections). */
+  siblings?: QueueSibling[];
 }
 
 export interface ExtractionSubmission {
