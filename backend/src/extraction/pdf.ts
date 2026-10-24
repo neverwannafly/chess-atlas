@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
 export const MIN_TEXT_CHARS = 200;
+/** Image-heavy brochures often keep a thin text layer (URLs, event codes) that hides the content. */
+export const MIN_CHARS_PER_PAGE = 200;
 const UA = "Mozilla/5.0 (compatible; ChessAtlasBot/1.0; +https://chessatlas.app)";
 
 export class PdfError extends Error {
@@ -104,6 +106,9 @@ export async function processPdfBytes(bytes: Buffer): Promise<PdfResult> {
   if (!bytes.subarray(0, 1024).includes("%PDF")) throw new PdfError("not a pdf");
   const hash = sha256(bytes);
   const { text, pages } = await extractText(bytes);
-  if (text.length < MIN_TEXT_CHARS) throw Object.assign(new PdfError("scanned/no text"), { sha256: hash });
+  const dense = text.replace(/\s+/g, " ").trim().length;
+  if (dense < MIN_TEXT_CHARS || dense / Math.max(1, pages) < MIN_CHARS_PER_PAGE) {
+    throw Object.assign(new PdfError("scanned/no text"), { sha256: hash });
+  }
   return { bytes, sha256: hash, text, pages };
 }
