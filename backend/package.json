@@ -8,7 +8,8 @@
     "start": "node dist/index.js",
     "scrape": "tsx src/scripts/scrape.ts",
     "extract": "tsx src/extraction/worker.ts",
-    "test": "tsx --test src/lib/*.test.ts",
+    "chessresults": "tsx src/chessresults/main.ts",
+    "test": "tsx --test src/lib/*.test.ts src/chessresults/*.test.ts src/fide/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

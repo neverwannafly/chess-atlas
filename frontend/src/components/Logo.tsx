@@ -1,27 +1,24 @@
 /**
- * Chess Atlas mark: a board square turned 45° into a map pin, with two
- * checkered cells cut through it. Single colour; fills with currentColor.
- * Source of truth: public/brand/mark.svg (24×24 grid).
+ * Chess Atlas mark: the owner's compass-knight artwork (public/brand/compass-knight-minimal.jpg),
+ * used as-is. The JPG has a near-black square background, so it is clipped to the compass circle
+ * (the ring spans ~77% of the image; the image is scaled up to crop to it). The 1024px source is
+ * always downscaled, so it stays crisp at 2x for 24 to 40px.
  */
-const MARK_D =
-  "M15.771 3.353L19.542 7.124A5.333 5.333 0 0 1 19.542 14.667L12 22.209L4.458 14.667A5.333 5.333 0 0 1 4.458 7.124L8.229 3.353A5.333 5.333 0 0 1 15.771 3.353ZM12 4.861L15.017 7.878L12 10.895L8.983 7.878ZM12 10.895L15.017 13.912L12 16.929L8.983 13.912Z";
+const SRC = "/brand/compass-knight-minimal.jpg";
 
-type Tone = "accent" | "current";
-
-export function LogoMark({ className = "h-6 w-6", tone = "accent" }: { className?: string; tone?: Tone }) {
+export function LogoMark({ className = "h-7 w-7" }: { className?: string; tone?: "accent" | "current" }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className={[
-        "shrink-0 transition-transform duration-200 ease-out motion-safe:group-hover/logo:-translate-y-px",
-        tone === "accent" ? "text-accent" : "",
-        className,
-      ].join(" ")}
-      fill="currentColor"
-      aria-hidden
-    >
-      <path fillRule="evenodd" d={MARK_D} />
-    </svg>
+    <span className={["relative inline-block shrink-0 overflow-hidden rounded-full bg-[#060b0e]", className].join(" ")} aria-hidden>
+      <img
+        src={SRC}
+        alt=""
+        width={56}
+        height={56}
+        decoding="async"
+        draggable={false}
+        className="absolute left-1/2 top-1/2 h-full w-full max-w-none -translate-x-1/2 -translate-y-1/2 scale-[1.3] select-none"
+      />
+    </span>
   );
 }
 
@@ -29,9 +26,9 @@ export function Wordmark({
   markOnly = false,
   tone = "accent",
   className = "",
-}: { markOnly?: boolean; tone?: Tone; className?: string } = {}) {
+}: { markOnly?: boolean; tone?: "accent" | "current"; className?: string } = {}) {
   return (
-    <span className={["group/logo flex items-center gap-2", className].join(" ")}>
+    <span className={["flex items-center gap-2", className].join(" ")}>
       <LogoMark tone={tone} />
       {markOnly ? (
         <span className="sr-only">Chess Atlas</span>

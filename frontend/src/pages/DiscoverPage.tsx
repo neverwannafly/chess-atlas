@@ -8,6 +8,8 @@ import { FilterSheet } from "@/components/filters/FilterSheet";
 import { EmptyState, ErrorState, RowSkeletons, type Relaxation } from "@/components/States";
 import { NumberTicker } from "@/components/ui/NumberTicker";
 import { useCatalog } from "@/hooks/useCatalog";
+import { useHealth } from "@/hooks/queries";
+import { SourceLine, SOURCES } from "@/components/Trust";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useSearchText } from "@/hooks/useSearchText";
 import { getUi, setUi, useUi } from "@/hooks/useDiscoverUi";
@@ -23,6 +25,7 @@ export default function DiscoverPage() {
   const { filters, update, clear } = useFilters();
   const f = useDeferredValue(filters);
   const catalog = useCatalog(filters.past);
+  const health = useHealth();
   const today = todayIST();
   const ctx = useMemo(() => ({ today }), [today]);
   const [near, setNear] = useState<LatLng | null>(null);
@@ -151,6 +154,9 @@ export default function DiscoverPage() {
             <ChevronDown className="pointer-events-none absolute right-1.5 h-4 w-4 text-subtle" aria-hidden />
           </label>
         </div>
+        <SourceLine sources={[SOURCES.aicf]} refreshedAt={health.data ? health.data.lastScrapeAt : undefined} verb="calendar checked" className="pb-2 pt-1">
+          <span className="text-subtle">· brochure details summarised automatically; confirm with the organiser</span>
+        </SourceLine>
         <div ref={listTop} className="scroll-mt-0" />
         <div className="lg:pt-2" style={{ opacity: f !== filters ? 0.7 : 1, transition: "opacity 120ms" }}>{body}</div>
       </div>

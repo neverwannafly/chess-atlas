@@ -7,6 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import adminRouter from "./routes/admin.js";
 import publicRouter from "./routes/public.js";
+import chessResultsRouter from "./routes/chessresults.js";
+import privacyRouter from "./routes/privacy.js";
 import { ApiError, errorHandler } from "./lib/http.js";
 
 export function createApp() {
@@ -50,6 +52,8 @@ export function createApp() {
 
   app.use("/api/admin", adminRouter);
   app.use("/api", publicRouter);
+  app.use("/api", chessResultsRouter);
+  app.use("/api", privacyRouter);
   app.use("/api", (_req, _res, next) => next(new ApiError(404, "NOT_FOUND", "No such endpoint")));
 
   const here = path.dirname(fileURLToPath(import.meta.url));

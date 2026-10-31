@@ -57,6 +57,8 @@ export interface BrochureExtraction {
 /** Row shape for list views. */
 export interface EventSummary {
   eventCode: string;
+  /** Human-readable URL key, e.g. "8th-shaastra-rapid-fide-rated-chess-tournament-2026". */
+  slug: string;
   name: string;
   startDate: string;
   endDate: string;

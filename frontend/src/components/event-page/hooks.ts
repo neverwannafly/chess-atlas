@@ -10,7 +10,7 @@ export function useCachedSummary(code: string): EventSummary | undefined {
       if (!data) continue;
       const pages = "pages" in data ? data.pages : [data];
       for (const p of pages) {
-        const e = p?.data?.find((x) => x.eventCode === code);
+        const e = p?.data?.find((x) => x.slug === code || x.eventCode === code);
         if (e) return e;
       }
     }

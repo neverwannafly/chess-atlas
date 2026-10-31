@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { Tone } from "@/lib/eventFacts";
 
-type BadgeTone = "neutral" | "accent" | "warn" | "outline";
+type BadgeTone = "neutral" | "accent" | "warn" | "outline" | "live" | "upcoming" | "finished";
 
 export function Badge({ tone = "neutral", className, children, title }: { tone?: BadgeTone; className?: string; children: React.ReactNode; title?: string }) {
   const tones: Record<BadgeTone, string> = {
@@ -9,6 +9,9 @@ export function Badge({ tone = "neutral", className, children, title }: { tone?:
     accent: "bg-accent-soft text-accent",
     warn: "bg-warn-soft text-warn",
     outline: "border border-border-strong text-fg",
+    live: "bg-live-soft text-live",
+    upcoming: "bg-upcoming-soft text-upcoming",
+    finished: "bg-finished-soft text-finished",
   };
   return (
     <span title={title} className={cn("inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-sm px-2 text-small font-medium leading-none", tones[tone], className)}>

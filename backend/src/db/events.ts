@@ -1,6 +1,7 @@
 import db from "./database.js";
 import { parsePlace } from "../lib/place.js";
 import { addDays, todayIST } from "../lib/dates.js";
+import { pickEventSlug, slugify } from "../lib/slug.js";
 import type {
   BrochureExtraction, EventDetail, EventStatus, EventSummary, ExtractionStatus, FacetCount,
   QueueItem, QueueSibling, ScrapedEvent, Stats, TimeControlType,
@@ -27,6 +28,7 @@ export function setMeta(key: string, value: string): void {
 interface EventRow {
   id: number;
   eventCode: string;
+  slug: string | null;
   name: string;
   startDate: string;
   endDate: string;
@@ -62,12 +64,13 @@ export function statusOf(startDate: string, endDate: string, today = todayIST())
   return "ongoing";
 }
 
-export const SUMMARY_COLUMNS = `eventCode, name, startDate, endDate, city, state, brochureUrl, extractionStatus, tagline,
+export const SUMMARY_COLUMNS = `eventCode, slug, name, startDate, endDate, city, state, brochureUrl, extractionStatus, tagline,
   timeControlType, rounds, fideRated, totalPrizeInr, entryFeeMinInr, registrationDeadline, venueName`;
 
 export function toSummary(r: Partial<EventRow> & Pick<EventRow, "eventCode" | "name" | "startDate" | "endDate">, today = todayIST()): EventSummary {
   return {
     eventCode: r.eventCode,
+    slug: r.slug ?? r.eventCode,
     name: r.name,
     startDate: r.startDate,
     endDate: r.endDate,
@@ -107,8 +110,20 @@ function toDetail(r: EventRow): EventDetail {
   };
 }
 
-export function getEventRow(eventCode: string): EventRow | undefined {
-  return db.prepare("SELECT * FROM events WHERE eventCode = ?").get(eventCode) as EventRow | undefined;
+/** Look up by slug or by the legacy numeric eventCode. */
+export function getEventRow(key: string): EventRow | undefined {
+  return db.prepare("SELECT * FROM events WHERE slug = ? OR eventCode = ? ORDER BY slug = ? DESC LIMIT 1").get(key, key, key) as EventRow | undefined;
+}
+
+function slugTaken(slug: string, exceptId: number | null): boolean {
+  const r = db.prepare("SELECT id FROM events WHERE slug = ? AND id IS NOT ?").get(slug, exceptId) as { id: number } | undefined;
+  return r !== undefined;
+}
+
+/** Unique slug for an event. Keeps the current slug while the name stays the same (ignoring case, accents, punctuation). */
+function eventSlugFor(e: { name: string; startDate: string }, ex: { id: number; name: string; slug: string | null } | undefined): string {
+  if (ex?.slug && slugify(ex.name) === slugify(e.name)) return ex.slug;
+  return pickEventSlug(e.name, e.startDate, (s) => slugTaken(s, ex?.id ?? null));
 }
 
 export function getEventDetail(eventCode: string): EventDetail | null {
@@ -148,14 +163,15 @@ export function upsertScrapedEvent(e: ScrapedEvent): UpsertResult {
   const { city, state } = parsePlace(e.place);
   const now = nowIso();
   const run = db.transaction((): UpsertResult => {
-    const ex = getEventRow(e.eventCode);
+    const ex = db.prepare("SELECT * FROM events WHERE eventCode = ?").get(e.eventCode) as EventRow | undefined;
     if (!ex) {
+      const slug = eventSlugFor(e, undefined);
       const info = db
         .prepare(
-          `INSERT INTO events (eventCode, name, startDate, endDate, place, city, state, brochureUrl, extractionStatus, createdAt, updatedAt, lastSeenAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO events (eventCode, slug, name, startDate, endDate, place, city, state, brochureUrl, extractionStatus, createdAt, updatedAt, lastSeenAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(e.eventCode, e.name, e.startDate, e.endDate, e.place, city, state, e.brochureUrl, e.brochureUrl ? "pending" : "no_brochure", now, now, now);
+        .run(e.eventCode, slug, e.name, e.startDate, e.endDate, e.place, city, state, e.brochureUrl, e.brochureUrl ? "pending" : "no_brochure", now, now, now);
       syncFts(Number(info.lastInsertRowid));
       return { isNew: true, changed: true };
     }
@@ -163,8 +179,9 @@ export function upsertScrapedEvent(e: ScrapedEvent): UpsertResult {
     // A missing brochure on a later scrape never wipes a known one.
     const brochureUrl = e.brochureUrl ?? ex.brochureUrl;
     const brochureChanged = brochureUrl !== ex.brochureUrl;
+    const slug = eventSlugFor(e, ex);
     const changed =
-      ex.name !== e.name || ex.startDate !== e.startDate || ex.endDate !== e.endDate || ex.place !== e.place ||
+      slug !== ex.slug || ex.name !== e.name || ex.startDate !== e.startDate || ex.endDate !== e.endDate || ex.place !== e.place ||
       ex.city !== city || ex.state !== state || brochureChanged;
 
     let status = ex.extractionStatus;
@@ -186,9 +203,9 @@ export function upsertScrapedEvent(e: ScrapedEvent): UpsertResult {
       return { isNew: false, changed: false };
     }
     db.prepare(
-      `UPDATE events SET name = ?, startDate = ?, endDate = ?, place = ?, city = ?, state = ?, brochureUrl = ?,
+      `UPDATE events SET slug = ?, name = ?, startDate = ?, endDate = ?, place = ?, city = ?, state = ?, brochureUrl = ?,
          extractionStatus = ?, extractionAttempts = ?, extractionError = ?, updatedAt = ?, lastSeenAt = ? WHERE id = ?`,
-    ).run(e.name, e.startDate, e.endDate, e.place, city, state, brochureUrl, status, attempts, error, now, now, ex.id);
+    ).run(slug, e.name, e.startDate, e.endDate, e.place, city, state, brochureUrl, status, attempts, error, now, now, ex.id);
     syncFts(ex.id);
     return { isNew: false, changed: true };
   });

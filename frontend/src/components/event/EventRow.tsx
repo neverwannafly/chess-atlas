@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 import type { EventSummary } from "@/types/event";
 import { useEvent } from "@/hooks/queries";
 import { useSeen } from "@/hooks/useInView";
-import { displayName, rowFacts } from "@/lib/eventFacts";
+import { displayName, rowFacts, eventPath } from "@/lib/eventFacts";
 import { cn } from "@/lib/utils";
 
 /** Desktop columns: date · name/place · format · FIDE · prize · entry · registration · arrow. Shared with the sticky group headers. */
@@ -48,7 +48,7 @@ function Cell({ main, note, className, title, tone }: { main: React.ReactNode | 
 export function EventRow({ e }: { e: EventSummary; onOpen?: (code: string) => void }) {
   const [ref, seen] = useSeen<HTMLElement>("400px");
   // The summary lacks the time-control notation and fee tiers; fetch the brochure data once near the viewport.
-  const { data: detail } = useEvent(e.eventCode, seen && e.extractionStatus === "done");
+  const { data: detail } = useEvent(e.slug || e.eventCode, seen && e.extractionStatus === "done");
   const f = rowFacts(e, detail);
   const name = displayName(e.name);
   const nameRef = useRef<HTMLSpanElement>(null);
@@ -77,7 +77,7 @@ export function EventRow({ e }: { e: EventSummary; onOpen?: (code: string) => vo
       <div className="min-w-0 flex-1">
         <h3 className="line-clamp-2 text-[15px] font-medium leading-snug tracking-h3 text-fg lg:line-clamp-none lg:truncate">
           <Link
-            to={`/events/${encodeURIComponent(e.eventCode)}`}
+            to={eventPath(e)}
             viewTransition
             onClick={() => {
               // Name the clicked title so the event page title (view-transition-name: event-title-{code}) morphs from it.

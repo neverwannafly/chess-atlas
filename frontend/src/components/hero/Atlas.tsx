@@ -40,8 +40,13 @@ function cellFor(lat: number, lng: number): [number, number] {
 }
 
 /** All base dots as one path: a full circle per cell drawn with two arcs. */
-const BASE_R = 0.2;
+const BASE_R = 0.24;
 const BASE_PATH = LAND.map(([c, r]) => `M${c + 0.5 - BASE_R} ${r + 0.5}a${BASE_R} ${BASE_R} 0 1 0 ${BASE_R * 2} 0a${BASE_R} ${BASE_R} 0 1 0 ${-BASE_R * 2} 0`).join("");
+
+/** Per-dot circles for the pointer glow (see hooks/useHeroPointer.ts); invisible until lit. */
+const GLOW_DOTS = LAND.map(([c, r]) => (
+  <circle key={`${c},${r}`} data-glow-dot data-i={r * W + c} cx={c + 0.5} cy={r + 0.5} r={0.3} className="atlas-glow-dot" />
+));
 
 interface Spot {
   key: string;
@@ -89,7 +94,7 @@ export const Atlas = memo(function Atlas({ events, onPick, className }: {
   return (
     <div className={className}>
       <div className="relative" style={{ aspectRatio: `${W} / ${H}` }}>
-        <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full overflow-visible" role="img" aria-label={`Map of India with ${pluralize(spots.length, "place")} hosting tournaments`}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full overflow-visible" data-glow-grid data-cols={W} data-rows={H} role="img" aria-label={`Map of India with ${pluralize(spots.length, "place")} hosting tournaments`}>
           <defs>
             <radialGradient id="atlas-glow">
               <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.45" />
@@ -97,6 +102,7 @@ export const Atlas = memo(function Atlas({ events, onPick, className }: {
             </radialGradient>
           </defs>
           <path d={BASE_PATH} fill="var(--atlas-dot)" />
+          <g aria-hidden pointerEvents="none">{GLOW_DOTS}</g>
           <AnimatePresence initial={!reduce}>
             {spots.map((s, i) => {
               const rad = Math.min(0.34 + Math.sqrt(s.count) * 0.13, 0.85);

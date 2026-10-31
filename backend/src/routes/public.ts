@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, wrap } from "../lib/http.js";
 import { addDays } from "../lib/dates.js";
 import { AICF_URL, countEvents, getEventDetail, getFacets, getMeta, getStats, listEvents } from "../db/events.js";
+import { linkedTournament } from "../db/eventLinks.js";
 import { buildIcs } from "../lib/ics.js";
 import { appVersion } from "../lib/version.js";
 import { getInsights } from "../db/insights.js";
@@ -48,13 +49,14 @@ router.get(
   }),
 );
 
-const codeParam = z.string().min(1).max(40).regex(/^[\w\-.]+$/);
+const codeParam = z.string().min(1).max(100).regex(/^[\w\-.]+$/);
 
 router.get(
   "/events/:eventCode",
   wrap((req, res) => {
     const code = codeParam.safeParse(req.params.eventCode);
-    const ev = code.success ? getEventDetail(code.data) : null;
+    const ev0 = code.success ? getEventDetail(code.data) : null;
+    const ev = ev0 && code.success ? { ...ev0, chessResults: linkedTournament(ev0.eventCode) } : ev0;
     if (!ev) throw new ApiError(404, "NOT_FOUND", "Event not found");
     res.set("Cache-Control", PUBLIC_CACHE);
     res.json({ data: ev });

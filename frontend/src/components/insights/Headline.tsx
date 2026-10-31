@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
+import { eventPath } from "@/lib/eventFacts";
 import { ArrowUpRight } from "lucide-react";
 import type { Insights, InsightsScope } from "@/types/event";
 import { addDays, formatDateRange, formatDayMonth, formatInr, formatWeekdayShort, pluralize } from "@/lib/format";
@@ -113,7 +114,7 @@ export function ThisWeek({ data }: { data: Insights }) {
           </ul>
           <WeekStrip data={data} shown={shown} reduce={reduce} />
           {w.biggest && (
-            <Link to={`/events/${encodeURIComponent(w.biggest.eventCode)}`} className="group mt-6 block rounded-md border border-border bg-surface-2 p-4 transition-colors hover:border-border-strong">
+            <Link to={eventPath(w.biggest)} className="group mt-6 block rounded-md border border-border bg-surface-2 p-4 transition-colors hover:border-border-strong">
               <span className="flex items-center justify-between gap-3 text-label text-muted">
                 Biggest purse this week
                 <ArrowUpRight className="h-4 w-4 text-subtle transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-fg" aria-hidden />
@@ -134,7 +135,7 @@ export function ThisWeek({ data }: { data: Insights }) {
                 animate={shown ? { opacity: 1, x: 0 } : undefined}
                 transition={{ duration: 0.5, ease: EASE, delay: reduce ? 0 : 0.15 + i * 0.07 }}
               >
-                <Link to={`/events/${encodeURIComponent(e.eventCode)}`} className="group -mx-2 grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 py-2.5 transition-colors hover:bg-surface-2">
+                <Link to={eventPath(e)} className="group -mx-2 grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 rounded-sm px-2 py-2.5 transition-colors hover:bg-surface-2">
                   <span className="text-center leading-none">
                     <span className="block text-[20px] font-semibold tabular-nums">{+e.startDate.slice(8, 10)}</span>
                     <span className="mt-1 block text-[10px] uppercase tracking-[0.06em] text-subtle">{formatWeekdayShort(e.startDate)}</span>

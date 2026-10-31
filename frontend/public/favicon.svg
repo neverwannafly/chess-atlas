@@ -1,4 +1,54 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-  <style>path{fill:#0e7a68}@media (prefers-color-scheme:dark){path{fill:#3ccfb2}}</style>
-  <path fill-rule="evenodd" d="M15.771 3.353L19.542 7.124A5.333 5.333 0 0 1 19.542 14.667L12 22.209L4.458 14.667A5.333 5.333 0 0 1 4.458 7.124L8.229 3.353A5.333 5.333 0 0 1 15.771 3.353ZM12 4.861L15.017 7.878L12 10.895L8.983 7.878ZM12 10.895L15.017 13.912L12 16.929L8.983 13.912Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>
+    .compass-rim { stroke: #0e7a68; }
+    .compass-tick { stroke: #0e7a68; }
+    .compass-north { fill: #0e7a68; }
+    .knight-fill { fill: #0e7a68; }
+    .knight-eye { fill: #ffffff; }
+
+    @media (prefers-color-scheme: dark) {
+      .compass-rim { stroke: #38ef7d; }
+      .compass-tick { stroke: #3ccfb2; }
+      .compass-north { fill: #38ef7d; }
+      .knight-fill { fill: #38ef7d; }
+      .knight-eye { fill: #0c1014; }
+    }
+  </style>
+
+  <!-- Outer Compass Ring -->
+  <circle cx="16" cy="16" r="14" class="compass-rim" stroke-width="2" />
+  
+  <!-- Subtle Internal Radar Ring -->
+  <circle cx="16" cy="16" r="10.5" class="compass-rim" stroke-width="1" stroke-dasharray="2 2" stroke-opacity="0.6" />
+
+  <!-- Cardinal Points / Ticks -->
+  <line x1="16" y1="2" x2="16" y2="5" class="compass-tick" stroke-width="1.8" stroke-linecap="round" />
+  <line x1="16" y1="27" x2="16" y2="30" class="compass-tick" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="2" y1="16" x2="5" y2="16" class="compass-tick" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="27" y1="16" x2="30" y2="16" class="compass-tick" stroke-width="1.5" stroke-linecap="round" />
+
+  <!-- North Arrow Indicator -->
+  <polygon points="16,5.5 14,8.5 18,8.5" class="compass-north" />
+
+  <!-- Centered Bold Knight Silhouette -->
+  <!-- Base -->
+  <path d="M11.5 24.5 H20.5 C20.5 23.5 19.8 23 18.5 23 H13.5 C12.2 23 11.5 23.5 11.5 24.5 Z" class="knight-fill" />
+  
+  <!-- Body & Head -->
+  <path d="M20 22.5
+           C20 19.8 19.4 17.8 17.8 15.6
+           C17 14.6 16.5 13.5 16.5 12.2
+           C16.5 11.8 16.8 11 17.2 10.2
+           C16.3 10.6 15.2 11.4 14.8 12.3
+           C14.3 12 13.7 12.2 13.2 12.6
+           C12.5 13.2 12 14 11.2 14.9
+           C10.6 15.5 9.4 16.4 8.7 17.3
+           C8.3 17.9 8.7 18.5 9.5 18.5
+           C10.2 18.5 11 18 11.8 17.5
+           C11.2 18.8 11 20.3 11.3 22.5
+           Z"
+        class="knight-fill" />
+
+  <!-- Eye Dot -->
+  <circle cx="12.4" cy="15" r="0.8" class="knight-eye" />
 </svg>

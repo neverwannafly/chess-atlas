@@ -6,6 +6,7 @@ import { ApiError, wrap } from "../lib/http.js";
 import { brochureExtractionSchema } from "../extraction/schema.js";
 import { getEventRow, getExtractionQueue, saveExtraction, saveExtractionFailure } from "../db/events.js";
 import { runScrape } from "../services/scraper.js";
+import { completeDeletion, listDeletionRequests, setDeletionStatus } from "../db/deletion.js";
 
 const router = Router();
 
@@ -95,6 +96,49 @@ router.post(
     if (!saveExtractionFailure(req.params.eventCode, body.data.error)) throw new ApiError(404, "NOT_FOUND", "Event not found");
     const row = getEventRow(req.params.eventCode)!;
     res.json({ data: { eventCode: row.eventCode, extractionStatus: row.extractionStatus, attempts: row.extractionAttempts } });
+  }),
+);
+
+// ---- privacy decisions (admin) -------------------------------------------------------------------
+
+router.get(
+  "/deletion-requests",
+  wrap((req, res) => {
+    const status = z.enum(["received", "in_review", "completed", "rejected"]).optional().parse(req.query.status);
+    res.json({ data: listDeletionRequests(status) });
+  }),
+);
+
+const requestId = z.coerce.number().int().positive();
+
+router.post(
+  "/deletion-requests/:id/review",
+  wrap((req, res) => {
+    const id = requestId.parse(req.params.id);
+    if (!setDeletionStatus(id, "in_review", null, Date.now())) throw new ApiError(409, "CONFLICT", "Request not found or already completed");
+    res.json({ data: { id, status: "in_review" } });
+  }),
+);
+
+router.post(
+  "/deletion-requests/:id/reject",
+  wrap((req, res) => {
+    const id = requestId.parse(req.params.id);
+    const note = z.string().trim().min(1).max(500).parse(req.body?.note);
+    if (!setDeletionStatus(id, "rejected", note, Date.now())) throw new ApiError(409, "CONFLICT", "Request not found or already completed");
+    res.json({ data: { id, status: "rejected" } });
+  }),
+);
+
+router.post(
+  "/deletion-requests/:id/complete",
+  wrap((req, res) => {
+    const id = requestId.parse(req.params.id);
+    const result = completeDeletion(id, Date.now());
+    if (!result) {
+      throw new ApiError(409, "CONFLICT", "Cannot complete: request not found, already completed, or has no FIDE id or chess-results entry to act on");
+    }
+    res.json({ data: { id, status: "completed", ...result } });
   }),
 );
 

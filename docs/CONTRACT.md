@@ -53,6 +53,8 @@ All JSON responses: `{ "data": ..., "meta"?: ... }`. Errors: `{ "error": { "code
 
 ### `GET /api/events/:eventCode` → `{ data: EventDetail }` (404 if missing)
 
+`:eventCode` accepts the event `slug` (preferred) or the numeric `eventCode`. Every event carries `slug`: unique, lowercase ASCII from the name, e.g. `8th-shaastra-rapid-fide-rated-chess-tournament-2026`.
+
 ### `GET /api/events/:eventCode/calendar.ics` → `text/calendar` single VEVENT (all-day, end exclusive)
 
 ### `GET /api/meta/filters`
@@ -82,6 +84,26 @@ regular adult fee from the brochure's fee table, not `entryFeeMinInr` (which is 
 titled players). Category-prize kinds are keyword-matched over category/label text.
 
 ### `GET /api/health` → `{ data: { status: "ok", events, lastScrapeAt, version } }`
+
+### Chess-results mirror and players (fields used for player links)
+
+Shared rules: a FIDE id (`fideId`, `whiteFideId`, `opponentFideId`, …) is returned only when verified
+(decision 16); unverified ids are `null`. A player id is `null` for a removed player (privacy erasure),
+and such rows are not linked. A birth year is never returned; only `ageCategory`.
+
+- `GET /api/chessresults/tournaments/:id` → `data.standings[]` carries `playerId` (number or null).
+- `GET /api/chessresults/tournaments/:id/rounds/:round` → each game carries `whitePlayerId`,
+  `blackPlayerId`, `whiteFed`, `blackFed` besides names, ratings and start numbers.
+- `GET /api/players/:id` → `data` adds `club` (from the latest event that lists one), `ageCategory`,
+  `identNumber` (card-verified only) and `results[]`: one row per round, newest event first, with
+  `tournamentId, tournament, startDate, endDate, snr, round, board, opponentSnr, opponentPlayerId,
+  opponentName, opponentFideId, opponentRating, opponentFed, opponentTitle, color ("w"|"b"|null),
+  result, fetchedAtMs, source`. `result` is from this player's side: `"1"`, `"½"`, `"0"`, `"+"`/`"-"`
+  (forfeit), or null while unplayed. `source` is `"card"` (player card, decision 17) or `"pairings"`
+  (derived from stored round pairings when no card has been fetched for that event).
+  `meta.refresh = { state, queued, reason, lastRefreshedAt }`: `state` is `"queued"` when this request
+  started a background refresh, otherwise `"idle"` (a refresh module may also report `"in_progress"`).
+  Clients poll briefly after `"queued"` and stay under the 60 s debounce.
 
 ## Admin API
 

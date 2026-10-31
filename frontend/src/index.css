@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ───────────────────────── Arbiter design tokens ─────────────────────────
-   See design-system-v2.md. Light is the default; `.dark` on <html> (set by
+   See docs/DESIGN_SYSTEM.md. Light is the default; `.dark` on <html> (set by
    public/theme-init.js before paint) swaps the palette. */
 :root {
   --bg: #f6f7f8;
@@ -13,8 +13,8 @@
   --border: #e3e6ea;
   --border-strong: #cdd2d8;
   --fg: #0e1216;
-  --fg-muted: #5a6470;
-  --fg-subtle: #8a939e;
+  --fg-muted: #4f5964;
+  --fg-subtle: #67707b;
   --accent: #0e7a68;
   --accent-fg: #ffffff;
   --accent-soft: #e7f3f0;
@@ -22,6 +22,12 @@
   --warn-soft: #fdf3e1;
   --danger: #b42318;
   --danger-soft: #fef3f2;
+  --status-live: #0e7a68;
+  --status-live-soft: #e7f3f0;
+  --status-upcoming: #2f5b9a;
+  --status-upcoming-soft: #ebf1fa;
+  --status-finished: #4f5964;
+  --status-finished-soft: #f0f2f4;
   --board-light: #e9ecef;
   --board-dark: #9aa4b0;
   --board-hl: rgb(14 122 104 / 0.38);
@@ -45,7 +51,7 @@
   --bar-h: 56px;
   --toolbar-h: var(--header-h);
   --chrome-h: var(--header-h);
-  --atlas-dot: #d3d8de;
+  --atlas-dot: #ccd2d9;
   color-scheme: light;
 }
 
@@ -58,7 +64,7 @@
   --border-strong: #333942;
   --fg: #eceef1;
   --fg-muted: #98a1ac;
-  --fg-subtle: #6b737e;
+  --fg-subtle: #7c8591;
   --accent: #3ccfb2;
   --accent-fg: #04211c;
   --accent-soft: rgb(60 207 178 / 0.12);
@@ -66,6 +72,12 @@
   --warn-soft: rgb(242 176 74 / 0.12);
   --danger: #f97066;
   --danger-soft: rgb(249 112 102 / 0.1);
+  --status-live: #3ccfb2;
+  --status-live-soft: rgb(60 207 178 / 0.12);
+  --status-upcoming: #8fb1e6;
+  --status-upcoming-soft: rgb(143 177 230 / 0.12);
+  --status-finished: #98a1ac;
+  --status-finished-soft: #181b20;
   --board-light: #c9ced6;
   --board-dark: #6f7a88;
   --board-hl: rgb(60 207 178 / 0.45);
@@ -73,7 +85,7 @@
   --overlay: rgb(0 0 0 / 0.6);
   --glass: rgb(18 21 25 / 0.9);
   --glass-bg: rgb(11 13 16 / 0.86);
-  --atlas-dot: #262b33;
+  --atlas-dot: #303741;
 
   --shadow-1: inset 0 1px 0 rgb(255 255 255 / 0.03);
   --shadow-2: 0 8px 24px -8px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.03);
@@ -102,6 +114,12 @@
   --color-warn-soft: var(--warn-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-live: var(--status-live);
+  --color-live-soft: var(--status-live-soft);
+  --color-upcoming: var(--status-upcoming);
+  --color-upcoming-soft: var(--status-upcoming-soft);
+  --color-finished: var(--status-finished);
+  --color-finished-soft: var(--status-finished-soft);
 
   --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -134,6 +152,8 @@
   --text-h2--line-height: 1.25;
   --text-stat: 28px;
   --text-stat--line-height: 1;
+  --text-title: 28px;
+  --text-title--line-height: 1.15;
   --text-h1: 40px;
   --text-h1--line-height: 1.1;
   --text-display: 56px;
@@ -259,6 +279,49 @@
 .pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
 .pulse-ring { animation: ping 2s var(--motion-out) infinite; }
 .atlas-ping { transform-box: fill-box; transform-origin: center; animation: ping 2.4s var(--motion-out) infinite; }
+
+/* ── Header links: static hover states (colour change + simple underline), no pointer tracking.
+   Unlayered so the transition list here wins over Tailwind's transition-colors utility. ── */
+.hdr-link { position: relative; transition: color var(--dur-1) var(--motion-out), background-color var(--dur-1) var(--motion-out); }
+.hdr-link::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 6px;
+  height: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--fg) 55%, transparent);
+  transform: scaleX(0);
+  pointer-events: none;
+}
+.hdr-link[aria-current="page"]::after { transform: scaleX(1); background: var(--accent); }
+.hdr-link:focus-visible::after { transform: scaleX(1); }
+@media (hover: hover) and (pointer: fine) {
+  .hdr-link:hover::after { transform: scaleX(1); }
+}
+
+/* ── Hero cursor effects (values written by hooks/useHeroPointer.ts) ──
+   Only for a fine hovering pointer with motion allowed; transform/opacity on absolutely placed
+   layers, so no layout shift. Focus rings are untouched. */
+.atlas-glow-dot { display: none; }
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .atlas-glow-dot {
+    display: block;
+    fill: var(--accent);
+    opacity: 0;
+    pointer-events: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: opacity 280ms var(--motion-out), transform 280ms var(--motion-out);
+    filter: drop-shadow(0 0 0.25px var(--accent));
+  }
+  [data-magnetic] {
+    transform: translate3d(var(--mx, 0px), var(--my, 0px), 0);
+    transition: transform 260ms var(--motion-out);
+  }
+  [data-underline]::after { transform-origin: var(--ux, 50%) 50%; }
+}
 
 /* Page hand-off: a short cross-fade with a slight lift (View Transitions API, where supported). */
 @keyframes vt-out { to { opacity: 0; transform: translateY(-6px); } }
