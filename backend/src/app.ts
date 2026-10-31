@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import adminRouter from "./routes/admin.js";
+import playerImportRouter from "./routes/playerImport.js";
 import publicRouter from "./routes/public.js";
 import chessResultsRouter from "./routes/chessresults.js";
 import privacyRouter from "./routes/privacy.js";
@@ -50,6 +51,7 @@ export function createApp() {
   app.use(compression());
   app.use(cors());
 
+  app.use("/api/admin", playerImportRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api", publicRouter);
   app.use("/api", chessResultsRouter);
