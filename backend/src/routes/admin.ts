@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
-import { Router, json } from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { Router, json, raw } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { ApiError, wrap } from "../lib/http.js";
@@ -7,6 +9,9 @@ import { brochureExtractionSchema } from "../extraction/schema.js";
 import { getEventRow, getExtractionQueue, saveExtraction, saveExtractionFailure } from "../db/events.js";
 import { runScrape } from "../services/scraper.js";
 import { completeDeletion, listDeletionRequests, setDeletionStatus } from "../db/deletion.js";
+import db, { DATA_DIR } from "../db/database.js";
+import { getMeta, setMeta } from "../db/events.js";
+import { ingestMonthlyList, looksLikeZip } from "../fide/ingest.js";
 
 const router = Router();
 
@@ -139,6 +144,78 @@ router.post(
       throw new ApiError(409, "CONFLICT", "Cannot complete: request not found, already completed, or has no FIDE id or chess-results entry to act on");
     }
     res.json({ data: { id, status: "completed", ...result } });
+  }),
+);
+
+// ---- FIDE monthly list upload (admin) -----------------------------------------------------------
+// The production host cannot reach ratings.fide.com, so the monthly list is uploaded here instead.
+// POST the zip as the raw body: /api/admin/fide-list?period=YYYY-MM. The import runs in the background;
+// GET the same path for its status.
+
+const FIDE_PERIOD_KEY = "fide.ingestedPeriod";
+const FIDE_STATUS_KEY = "fide.importStatus";
+const FIDE_MAX_BYTES = 120 * 1024 * 1024;
+
+interface FideImportStatus {
+  state: "idle" | "running" | "done" | "error";
+  period: string | null;
+  message: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+const IDLE: FideImportStatus = { state: "idle", period: null, message: null, startedAt: null, finishedAt: null };
+
+function readFideStatus(): FideImportStatus {
+  const raw = getMeta(FIDE_STATUS_KEY);
+  if (!raw) return IDLE;
+  try { return JSON.parse(raw) as FideImportStatus; } catch { return IDLE; }
+}
+
+function writeFideStatus(s: FideImportStatus): void {
+  setMeta(FIDE_STATUS_KEY, JSON.stringify(s));
+}
+
+router.get(
+  "/fide-list",
+  wrap((_req, res) => {
+    res.json({ data: { ...readFideStatus(), ingestedPeriod: getMeta(FIDE_PERIOD_KEY) } });
+  }),
+);
+
+router.post(
+  "/fide-list",
+  raw({ type: () => true, limit: FIDE_MAX_BYTES }),
+  wrap((req, res) => {
+    const period = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "period must be YYYY-MM").parse(req.query.period);
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length < 1024) throw new ApiError(400, "BAD_REQUEST", "Send the zip file as the raw request body");
+    if (readFideStatus().state === "running") throw new ApiError(409, "CONFLICT", "An import is already running");
+
+    const dir = path.join(DATA_DIR, "fide");
+    fs.mkdirSync(dir, { recursive: true });
+    const zipPath = path.join(dir, `upload-${period}.zip`);
+    fs.writeFileSync(zipPath, body);
+    if (!looksLikeZip(zipPath)) {
+      fs.rmSync(zipPath, { force: true });
+      throw new ApiError(400, "BAD_REQUEST", "The upload is not a zip file");
+    }
+
+    const started: FideImportStatus = { state: "running", period, message: null, startedAt: new Date().toISOString(), finishedAt: null };
+    writeFideStatus(started);
+    res.status(202).json({ data: started });
+
+    void (async () => {
+      try {
+        const stats = await ingestMonthlyList({ period, db, zipPath });
+        setMeta(FIDE_PERIOD_KEY, period);
+        writeFideStatus({ ...started, state: "done", message: JSON.stringify(stats), finishedAt: new Date().toISOString() });
+      } catch (err) {
+        writeFideStatus({ ...started, state: "error", message: (err as Error).message, finishedAt: new Date().toISOString() });
+      } finally {
+        fs.rmSync(zipPath, { force: true });
+      }
+    })();
   }),
 );
 
