@@ -60,6 +60,37 @@ function RatingTiles({ points }: { points: FideRatingPoint[] }) {
   );
 }
 
+function RecordCard({ r }: { r: NonNullable<PlayerDetail["record"]> }) {
+  if (r.games <= 0) return <EmptyNote>No rated games on record yet</EmptyNote>;
+  const pts = Number.isInteger(r.points) ? String(r.points) : r.points.toFixed(1);
+  const items = [
+    { k: "Games", v: String(r.games) }, { k: "Wins", v: String(r.wins) }, { k: "Draws", v: String(r.draws) },
+    { k: "Losses", v: String(r.losses) }, { k: "Points", v: pts },
+  ];
+  const seg = (n: number) => ({ width: `${(n / r.games) * 100}%` });
+  return (
+    <section aria-label="Record" className="rounded-md border border-border bg-surface p-4 shadow-e1 sm:p-5">
+      <dl className="grid grid-cols-3 gap-x-4 gap-y-3 sm:grid-cols-5">
+        {items.map((i) => (
+          <div key={i.k}>
+            <dt className="text-label font-medium uppercase tracking-[0.08em] text-muted">{i.k}</dt>
+            <dd className="mt-1 font-mono text-[20px] font-medium leading-none tabular-nums">{i.v}</dd>
+          </div>
+        ))}
+      </dl>
+      <div
+        role="img"
+        aria-label={`${r.wins} wins, ${r.draws} draws, ${r.losses} losses`}
+        className="mt-4 flex h-1.5 overflow-hidden rounded-full bg-muted/40"
+      >
+        <span className="bg-accent" style={seg(r.wins)} />
+        <span className="bg-surface-2" style={seg(r.draws)} />
+        <span className="bg-muted" style={seg(r.losses)} />
+      </div>
+    </section>
+  );
+}
+
 // ───────────────────────────── small parts ─────────────────────────────
 
 function ColourMark({ c }: { c: "w" | "b" | null }) {
@@ -419,6 +450,8 @@ export default function PlayerPage() {
           </div>
         </div>
       </header>
+
+      {p.record && <div className="mt-5"><RecordCard r={p.record} /></div>}
 
       {vsId != null && vsId !== p.id && <HeadToHead p={p} vsId={vsId} results={results} />}
 

@@ -139,6 +139,7 @@ export interface PlayerDetail extends PlayerHit {
   fideFetchedAtMs: number | null;
   tournaments: PlayerTournament[];
   fideRatings: FideRatingPoint[];
+  record?: { games: number; wins: number; draws: number; losses: number; points: number };
 }
 
 export interface CrMirrorStatus {
