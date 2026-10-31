@@ -55,5 +55,6 @@ CMD ["node", "dist/index.js"]
 # ---- combined (default, last stage): API and worker in one container, sharing one SQLite volume ----
 # Build: docker build .   This is the image to deploy to API Frenzy (one replica, one volume).
 FROM api AS combined
-COPY backend/docker/start.sh ./start.sh
-CMD ["sh", "start.sh"]
+# One CMD, no extra file: the worker runs in the background and the API in the foreground.
+# If the API exits, the container exits and the platform restarts it.
+CMD ["sh", "-c", "node dist/chessresults/main.js & exec node dist/index.js"]
