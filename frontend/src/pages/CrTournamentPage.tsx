@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import { AlertTriangle, ArrowLeft, ArrowUpRight } from "lucide-react";
 import type { CrGame, CrStanding, CrTournamentDetail } from "@/types/chessresults";
@@ -303,8 +303,22 @@ function PageSkeleton() {
   );
 }
 
+type View = "standings" | "rounds";
+const VIEWS: { value: View; label: string }[] = [{ value: "standings", label: "Standings" }, { value: "rounds", label: "Rounds" }];
+
 export default function CrTournamentPage() {
   const { id = "" } = useParams();
+  const [params, setParams] = useSearchParams();
+  const view: View = params.get("view") === "rounds" ? "rounds" : "standings";
+  const setView = (v: View) => setParams((p) => { const n = new URLSearchParams(p); if (v === "standings") n.delete("view"); else n.set("view", v); return n; }, { replace: true });
+  const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const i = VIEWS.findIndex((o) => o.value === view);
+    const j = e.key === "Home" ? 0 : e.key === "End" ? VIEWS.length - 1 : (i + (e.key === "ArrowRight" ? 1 : VIEWS.length - 1)) % VIEWS.length;
+    setView(VIEWS[j].value);
+    document.getElementById(`tab-${VIEWS[j].value}`)?.focus();
+  };
   const { data: t, isPending, isError, error, refetch } = useCrTournament(id, true);
   useDocumentMeta(t?.name, t ? `${t.name}: standings, pairings and results from chess-results.com.` : undefined);
 
@@ -317,15 +331,39 @@ export default function CrTournamentPage() {
   return (
     <div className={shell}>
       <Header t={t} />
-      <div className="mt-10 space-y-14">
-        <section aria-labelledby="standings">
-          <SectionTitle id="standings" title={started ? "Standings" : "Starting list"} meta={`${t.standings.length} players`} />
-          <Standings rows={t.standings} />
-        </section>
-        <section aria-labelledby="rounds" className="max-w-3xl">
-          <SectionTitle id="rounds" title="Rounds" meta={<ExternalLink href={t.chessResultsUrl}>Full pairings</ExternalLink>} />
-          <Rounds t={t} />
-        </section>
+      <div className="mt-10">
+        <div role="tablist" aria-label="Tournament view" onKeyDown={onKey} className="flex w-full rounded-sm border border-border-strong/70 bg-surface-2 p-0.5 sm:inline-flex sm:w-auto">
+          {VIEWS.map((v) => {
+            const on = v.value === view;
+            return (
+              <button
+                key={v.value}
+                type="button"
+                role="tab"
+                id={`tab-${v.value}`}
+                aria-selected={on}
+                aria-controls={`panel-${v.value}`}
+                tabIndex={on ? 0 : -1}
+                onClick={() => setView(v.value)}
+                className={cn("relative flex h-10 flex-1 items-center justify-center whitespace-nowrap rounded-[5px] px-5 text-ui font-medium transition-colors sm:flex-none", on ? "text-fg" : "text-muted hover:text-fg")}
+              >
+                {on && <motion.span layoutId="view-thumb" className="absolute inset-0 rounded-[5px] border border-border bg-surface shadow-e1" transition={{ type: "spring", stiffness: 500, damping: 40 }} aria-hidden />}
+                <span className="relative">{v.value === "standings" ? (started ? "Standings" : "Starting list") : v.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {view === "standings" ? (
+          <section role="tabpanel" id="panel-standings" aria-labelledby="tab-standings" className="mt-6">
+            <SectionTitle id="standings" title={started ? "Standings" : "Starting list"} meta={`${t.standings.length} players`} />
+            <Standings rows={t.standings} />
+          </section>
+        ) : (
+          <section role="tabpanel" id="panel-rounds" aria-labelledby="tab-rounds" className="mt-6 max-w-3xl">
+            <SectionTitle id="rounds" title="Rounds" meta={<ExternalLink href={t.chessResultsUrl}>Full pairings</ExternalLink>} />
+            <Rounds t={t} />
+          </section>
+        )}
       </div>
       <SourceNote refreshedAt={t.lastRefreshedAt} href={t.chessResultsUrl} className="mt-10" />
     </div>
