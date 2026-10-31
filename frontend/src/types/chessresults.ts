@@ -1,4 +1,5 @@
 // Mirrored chess-results.com and FIDE data (see /api/chessresults/* and /api/players/*).
+import type { ResultRow } from "@/lib/playerRecord";
 
 export type CrStatus = "ongoing" | "upcoming" | "finished";
 
@@ -33,7 +34,8 @@ export interface CrStanding {
   snr: number;
   rank: number | null;
   points: number | null;
-  playerId: number;
+  /** Null for a removed player (privacy erasure); such rows are not linked. */
+  playerId: number | null;
   name: string;
   fideId: string | null;
   fed: string;
@@ -54,6 +56,8 @@ export interface CrRoundInfo {
 export type CrTournamentDetail = CrTournament & {
   roundList: CrRoundInfo[];
   standings: CrStanding[];
+  /** Set by the API: "in_progress" while a live refresh is running; poll until it changes. */
+  refresh?: { state: "fresh" | "updated" | "in_progress" | "skipped"; reason: string | null; lastRefreshedAt: string | null };
 };
 
 export type CrResult = "1-0" | "0-1" | "½-½" | "+-" | "-+" | "0-0" | null;
@@ -63,10 +67,15 @@ export interface CrGame {
   board: number;
   result: CrResult;
   whiteSnr: number | null;
+  /** Player page id; null for a removed player. */
+  whitePlayerId?: number | null;
+  whiteFed?: string | null;
   whiteName: string | null;
   whiteFideId: string | null;
   whiteRating: number | null;
   blackSnr: number | null;
+  blackPlayerId?: number | null;
+  blackFed?: string | null;
   blackName: string | null;
   blackFideId: string | null;
   blackRating: number | null;
@@ -106,7 +115,25 @@ export interface FideRatingPoint {
   games: number | null;
 }
 
+/** One round of a player's results (shape shared with the pure helpers in lib/playerRecord). */
+export type PlayerResult = ResultRow;
+
+/** meta.refresh on GET /api/players/:id. `state` "queued" means this request started a background refresh. */
+export interface PlayerRefresh {
+  state?: "queued" | "in_progress" | "idle" | string;
+  queued?: boolean;
+  reason: string | null;
+  lastRefreshedAt?: string | null;
+}
+
 export interface PlayerDetail extends PlayerHit {
+  /** chess-results Ident-Number; only present once verified from the player card. */
+  identNumber?: string | null;
+  /** Age category (never the birth year). */
+  ageCategory?: string | null;
+  club?: string | null;
+  results?: PlayerResult[];
+  refresh?: PlayerRefresh;
   sex: string | null;
   inactive: boolean | null;
   fideFetchedAtMs: number | null;

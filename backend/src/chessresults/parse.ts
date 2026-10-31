@@ -148,14 +148,17 @@ export function parseRound(html: string): GameRow[] {
     prevBoard = board;
     // Results are printed as "1 - 0" in the page, so compare with spaces removed.
     const result = cells.map((_, i) => text(i).replace(/\s+/g, "")).find((t) => RESULT_RE.test(t)) ?? null;
+    // Start numbers come from the player links: some events put a title column in front of the name
+    // and no start-number column, so a fixed column position silently drops every game.
+    const snrOf = (href: string | undefined) => toInt(/snr=(\d+)/.exec(href ?? "")?.[1]);
     games.push({
       match,
       board,
-      whiteSnr: toInt(text(1)),
+      whiteSnr: snrOf(links.eq(0).attr("href")),
       whiteName: clean(links.eq(0).text()),
       whiteFed: fedOf($(cells[wIdx])),
       whiteRating: rating(text(wIdx + 1)),
-      blackSnr: toInt(text(cells.length - 1)),
+      blackSnr: snrOf(links.eq(1).attr("href")),
       blackName: clean(links.eq(1).text()),
       blackFed: fedOf($(cells[bIdx])),
       blackRating: rating(text(bIdx + 1)),
@@ -254,7 +257,9 @@ function findHeader($: cheerio.CheerioAPI): StandingsColumns | null {
 export interface StartingRankRow {
   snr: number;
   name: string;
-  /** FIDE id printed in the starting-rank table; null when the player has none. */
+  /** chess-results Ident-Number, when the table has an ID column. */
+  identNumber: string | null;
+  /** FIDE id from the profile link or FideID column; null when the player has none. */
   fideId: string | null;
   fed: string | null;
   rating: number | null;
@@ -262,60 +267,119 @@ export interface StartingRankRow {
 }
 
 /**
- * The "Starting rank" table on a tournament's main page. It is the only view that prints the FIDE id
- * of every entry, so it is parsed on every refresh at no extra request cost.
+ * The "Starting rank" table on a tournament's main page. Columns are read from the header row, because
+ * the layout differs between events: some have an "ID" column (the chess-results Ident-Number) in front
+ * of "FideID", others do not. A FIDE id is taken only from its ratings.fide.com profile link, or from
+ * a column headed FideID; the Ident-Number is taken only from a column headed ID. Anything else is null.
  */
 export function parseStartingRank(html: string): StartingRankRow[] {
   const $ = cheerio.load(html);
   const heading = $("h2").filter((_, h) => clean($(h).text()).toLowerCase() === "starting rank").first();
-  const scope = heading.length ? heading.nextAll("table").first() : $("table");
+  const table = heading.length ? heading.nextAll("table").first() : $("table").first();
+  const header = table.find("tr").first().children("th,td").toArray().map((c) => clean($(c).text()).toLowerCase());
+  const col = (label: string) => header.findIndex((h) => h === label);
+  const idCol = col("id");
+  const fideCol = col("fideid");
+  const ratingCol = header.findIndex((h) => h === "rtgi" || h === "rtg" || h === "rating");
+  const clubCol = header.findIndex((h) => h.startsWith("club"));
   const rows: StartingRankRow[] = [];
-  scope.find("tr").each((_, tr) => {
+  table.find("tr").each((_, tr) => {
     const link = $(tr).find('a[href*="snr="]').first();
     if (link.length === 0) return;
     const tds = $(tr).children("td");
     const nameIdx = tds.index(link.closest("td"));
     if (nameIdx < 1) return;
-    const text = (i: number) => (i < tds.length ? clean($(tds[i]).text()) : "");
+    const text = (i: number) => (i >= 0 && i < tds.length ? clean($(tds[i]).text()) : "");
     const snr = toInt(text(0));
     if (snr === null) return;
-    const fideRaw = text(nameIdx + 1);
+    // FIDE id: prefer the profile link; fall back to the FideID column.
+    const fideLink = tds.toArray().map((td) => $(td).find('a[href*="ratings.fide.com"]').attr("href") ?? "")
+      .map((href) => /profile\/(\d{5,9})/.exec(href)?.[1]).find((x) => x);
+    const fideCell = fideCol >= 0 ? text(fideCol) : "";
+    const fideId = fideLink ?? (/^\d{5,9}$/.test(fideCell) ? fideCell : null);
+    const identCell = idCol >= 0 ? text(idCol) : "";
+    // Federation: its own column when the table has one; otherwise the row's class (e.g. "CRng2 IND").
+    const fedHeader = col("fed");
+    const fedCell = fedHeader >= 0 ? text(fedHeader) : "";
+    const fedClass = /\b([A-Z]{3})\b/.exec($(tr).attr("class") ?? "")?.[1] ?? "";
     rows.push({
       snr,
       name: clean(link.text()),
-      fideId: /^\d{5,9}$/.test(fideRaw) ? fideRaw : null,
-      fed: /^[A-Z]{2,3}$/.test(text(nameIdx + 2)) ? text(nameIdx + 2) : null,
-      rating: rating(text(nameIdx + 3)),
-      club: text(nameIdx + 4) || null,
+      identNumber: /^\d{1,14}$/.test(identCell) ? identCell : null,
+      fideId,
+      fed: /^[A-Z]{3}$/.test(fedCell) ? fedCell : fedClass || null,
+      rating: rating(text(ratingCol >= 0 ? ratingCol : nameIdx + 3)),
+      club: clubCol >= 0 ? text(clubCol) || null : null,
     });
   });
   return rows;
 }
 
-export interface PlayerCard {
-  /** chess-results' own player number, stable across events. */
-  identNumber: string | null;
-  fideId: string | null;
+export interface CardRound {
+  round: number;
+  board: number | null;
+  opponentSnr: number | null;
+  /** "w" or "b" from the colour icon; null if not shown. */
+  color: "w" | "b" | null;
+  /** Score as printed from this player's side: "1", "½", "0", or "" if not played yet. */
+  result: string;
+}
+
+export interface PlayerCardFull extends PlayerCard {
+  rounds: CardRound[];
 }
 
 /**
- * The player card (art=9&snr=N). Only the Ident-Number and Fide-ID rows are read. "Year of birth" is
- * deliberately not read, per docs/DECISIONS.md.
+ * Full player card: identity (Ident-Number, Fide-ID) and the per-round results for this event.
+ * "Year of birth" is still not read (see docs/DECISIONS.md, decision 8).
  */
+export function parsePlayerCardFull(html: string): PlayerCardFull {
+  const $ = cheerio.load(html);
+  const identity = parsePlayerCard(html);
+  const rounds: CardRound[] = [];
+  $("tr").each((_, tr) => {
+    const cells = $(tr).children("td");
+    if (cells.length < 8) return;
+    const round = toInt(clean($(cells[0]).text()));
+    const opp = $(tr).find('a[href*="snr="]').first();
+    if (round === null || opp.length === 0) return;
+    const colorIcon = $(tr).find("div[class*='Farbe']").first().attr("class") ?? "";
+    const color: "w" | "b" | null = /FarbewT|Farbew/.test(colorIcon) ? "w" : /FarbesT|Farbes/.test(colorIcon) ? "b" : null;
+    const snr = toInt(/snr=(\d+)/.exec(opp.attr("href") ?? "")?.[1]);
+    rounds.push({
+      round,
+      board: toInt(clean($(cells[1]).text())),
+      opponentSnr: snr,
+      color,
+      result: clean($(tr).find("td").last().text()),
+    });
+  });
+  return { ...identity, rounds };
+}
+
+export interface PlayerCard {
+  /** chess-results' own player number, stable across events. */
+  identNumber: string | null;
+  /** FIDE id from the card's "Fide-ID" row; null when the card shows none. */
+  fideId: string | null;
+  /** Year of birth from the card's "Year of birth" row (year only; the card gives no full date). */
+  birthYear: number | null;
+}
+
+/** Identity from the player card (art=9&snr=N): Ident-Number, Fide-ID and year of birth. */
 export function parsePlayerCard(html: string): PlayerCard {
   const $ = cheerio.load(html);
   const value = (label: string): string | null => {
-    const row = $("tr").filter((_, tr) => {
-      const first = clean($(tr).children("td,th").first().text()).toLowerCase();
-      return first === label;
-    }).first();
+    const row = $("tr").filter((_, tr) => clean($(tr).children("td,th").first().text()).toLowerCase() === label).first();
     const v = clean(row.children("td,th").eq(1).text());
     return v || null;
   };
   const ident = value("ident-number");
   const fide = value("fide-id");
+  const year = value("year of birth");
   return {
     identNumber: ident && /^\d{1,14}$/.test(ident) ? ident : null,
     fideId: fide && /^\d{5,9}$/.test(fide) ? fide : null,
+    birthYear: year && /^(19|20)\d{2}$/.test(year) ? Number(year) : null,
   };
 }

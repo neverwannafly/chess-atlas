@@ -6,6 +6,12 @@ import { getMeta, setMeta } from "../db/events.js";
 import { fetchIndiaArchive } from "./archive.js";
 import { cooldownRemainingMs, noteHealthy, noteRateLimited } from "./guard.js";
 import { runIdentJob } from "./ident.js";
+import { matchEventsToTournaments } from "../db/eventLinks.js";
+import { randomUUID } from "node:crypto";
+
+// A refresh holds this lease on the tournament row. A lease that is not renewed in time expires, and
+// the holder then fails its next write (see store.assertLease) instead of overwriting newer rows.
+export const LEASE_MS = 3 * 60_000;
 
 // One refresh cycle, run every 30 minutes by the worker:
 //   1. read the home page and the India federation page (two requests) and record what is listed
@@ -83,6 +89,13 @@ export async function runCycle(client = new CrClient(), budget = REQUESTS_PER_CY
     stats.listed = home.length;
     store.closeStaleListings(now);
 
+    // Link AICF events to their chess-results tournaments (cheap, local only).
+    try {
+      matchEventsToTournaments(now);
+    } catch (err) {
+      console.warn(`[chessresults] event matching failed: ${(err as Error).message}`);
+    }
+
     // 2. one archive window per cycle (older tournaments; see ARCHIVE_WINDOW_DAYS)
     const archStart = Date.now();
     try {
@@ -102,12 +115,12 @@ export async function runCycle(client = new CrClient(), budget = REQUESTS_PER_CY
 
     // 3. due refreshes (old finished events are retired from polling first)
     store.retireOldFinished(Date.now(), store.FETCH_FINISHED_DAYS);
-    const due = store.dueTournaments(Date.now(), 1000);
+    const due = store.dueTournaments(Date.now(), 1000).filter((id) => !store.isLeased(id, Date.now()));
     stats.due = due.length;
     let consecutive = 0;
     for (const id of due) {
       try {
-        await refreshTournament(id, get);
+        await refreshLeased(id, get);
         stats.refreshed++;
         consecutive = 0;
       } catch (err) {
@@ -173,11 +186,28 @@ export function nextFetchFor(status: store.Status, nowMs: number): number | null
   return null; // finished: the final pass is recorded by the caller
 }
 
-async function refreshTournament(id: string, get: (path: string) => Promise<string>): Promise<void> {
+/** Runs one refresh under the tournament's lease. Returns "busy" when another writer holds it. */
+export async function refreshLeased(id: string, get: (path: string) => Promise<string>): Promise<"done" | "busy"> {
+  const token = randomUUID();
+  if (!store.acquireLease(id, token, Date.now(), LEASE_MS)) return "busy";
+  try {
+    await refreshTournament(id, get, token);
+    return "done";
+  } catch (err) {
+    if (err instanceof store.LeaseLost) return "busy";
+    throw err;
+  } finally {
+    store.releaseLease(id, token);
+  }
+}
+
+async function refreshTournament(id: string, get: (path: string) => Promise<string>, token: string): Promise<void> {
+  const fence = () => store.assertLease(id, token, Date.now());
   const base = `tnr${id}.aspx?lan=1`;
   const mainHtml = await get(base);
   const page: TournamentPage = parseTournamentPage(mainHtml);
   const nowMs = Date.now();
+  fence();
   store.replaceStartingRank(id, parseStartingRank(mainHtml), nowMs);
 
   // Unchanged since our last pass (same "Last update" stamp, already backfilled): skip the standings
@@ -186,11 +216,13 @@ async function refreshTournament(id: string, get: (path: string) => Promise<stri
   const unchanged = !!before && before.backfilled === 1 && before.sourceUpdatedAtMs !== null && page.lastUpdateMs === before.sourceUpdatedAtMs;
   if (unchanged) {
     const status = deriveStatus(before, nowMs);
+    fence();
     store.markFetched(id, nowMs, page, status, nextFetchFor(status, nowMs), status === "finished");
     return;
   }
 
   const standings = parseRanking(await get(`${base}&art=1`));
+  fence();
   store.replaceStandings(id, standings, nowMs);
 
   // First full pass walks rounds from 1; later passes start at the last stored round.
@@ -201,12 +233,14 @@ async function refreshTournament(id: string, get: (path: string) => Promise<stri
   for (; round <= total; round++) {
     const games = parseRound(await get(`${base}&art=2&rd=${round}`));
     if (games.length === 0) break;
+    fence();
     store.replaceRound(id, round, games, Date.now());
   }
 
   const row = store.getTournamentRow(id);
   const status = row ? deriveStatus(row, Date.now()) : "ongoing";
   const finalPass = status === "finished";
+  fence();
   store.markFetched(id, Date.now(), page, status, nextFetchFor(status, Date.now()), finalPass);
 }
 

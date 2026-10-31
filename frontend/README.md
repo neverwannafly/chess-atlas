@@ -4,7 +4,7 @@ React 19 + Vite + Tailwind v4 + TanStack Query + react-router. The hero board is
 composition (`src/remotion/HeroGame.tsx`, lazy-loaded via `src/components/HeroBoard.tsx`).
 
 ```sh
-npm run dev     # proxies /api to localhost:8080
+npm run dev     # proxies /api to localhost:3001 (override with API_TARGET=http://host:port)
 npm run build
 npm run lint
 VITE_MOCK=1 npm run dev   # fixtures, no backend

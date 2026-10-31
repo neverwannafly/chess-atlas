@@ -9,10 +9,12 @@ import { PrizesBody } from "@/components/event-page/Prizes";
 import { ContactsBody, EligibilityBody, EntryBody, ScheduleBody, Section, VenueBody } from "@/components/event-page/Sections";
 import { CondensedBar, SectionNav } from "@/components/event-page/Chrome";
 import { MoreTournaments } from "@/components/event-page/More";
+import { LiveStandings } from "@/components/event-page/LiveStandings";
 import { SparseNotice } from "@/components/event-page/Sparse";
 import { Reveal } from "@/components/event-page/motion";
 import { useCachedSummary, useScrolledPast, useScrollSpy } from "@/components/event-page/hooks";
-import { useEvent } from "@/hooks/queries";
+import { useEvent, useHealth } from "@/hooks/queries";
+import { SourceLine } from "@/components/Trust";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { ApiError } from "@/lib/api";
 import { displayName } from "@/lib/eventFacts";
@@ -81,9 +83,10 @@ function BodySkeleton() {
 const Container = ({ children }: { children: React.ReactNode }) => <article className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">{children}</article>;
 
 export default function EventPage() {
-  const { eventCode = "" } = useParams();
-  const { data, isPending, isError, error, refetch } = useEvent(eventCode);
-  const cached = useCachedSummary(eventCode);
+  const { slug = "" } = useParams();
+  const { data, isPending, isError, error, refetch } = useEvent(slug);
+  const health = useHealth();
+  const cached = useCachedSummary(slug);
   const e = data ?? (cached ? preview(cached) : undefined);
   const [actionsRef, scrolledPast] = useScrolledPast(64);
   const sections = data ? sectionsFor(data) : [];
@@ -126,6 +129,11 @@ export default function EventPage() {
               <Section id="overview" title="Overview">
                 <Overview e={data} />
               </Section>
+              {data.chessResults && (
+                <Section id="standings" title="Live standings">
+                  <LiveStandings tournamentId={data.chessResults.tournamentId} />
+                </Section>
+              )}
               {sections.some((s) => s.id === "prizes") && d && (
                 <Section id="prizes" title="Prizes" meta={prizeMeta(d.prizes)}>
                   <PrizesBody prizes={d.prizes} />
@@ -159,11 +167,18 @@ export default function EventPage() {
               <Section id="more" title="More tournaments">
                 <MoreTournaments e={data} />
               </Section>
-              <p className="border-t border-border pt-6 text-small text-muted">
-                {data.extractedAt
-                  ? <>Summarised automatically from the official brochure on {formatDate(data.extractedAt.slice(0, 10))}. Always confirm details with the organiser before you travel.</>
-                  : <>Listing from the All India Chess Federation calendar. Confirm details with the organiser before you travel.</>}
-              </p>
+              <div className="space-y-1.5 border-t border-border pt-6">
+                <SourceLine
+                  sources={[{ name: "AICF calendar", href: data.aicfUrl }, ...(data.brochureUrl ? [{ name: "organiser brochure", href: data.brochureUrl }] : [])]}
+                  refreshedAt={health.data ? health.data.lastScrapeAt : undefined}
+                  verb="calendar checked"
+                />
+                <p className="text-small text-muted">
+                  {data.extractedAt
+                    ? <>Summarised automatically from the official brochure on {formatDate(data.extractedAt.slice(0, 10))}. Always confirm details with the organiser before you travel.</>
+                    : <>Listing from the All India Chess Federation calendar. Confirm details with the organiser before you travel.</>}
+                </p>
+              </div>
             </div>
             <aside className="hidden lg:block" aria-label="Page navigation">
               <div className="sticky top-[calc(var(--toolbar-h)+96px)]">

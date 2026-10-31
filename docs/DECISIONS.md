@@ -43,9 +43,12 @@ Owner: the project owner (s0.alively@gmail.com). Dates are when the owner confir
 7. **FIDE ids come from the starting-rank table** on each tournament's main page, which chess-results
    already prints for every entry. No extra requests are made for this.
 
-8. **Ident-Number collected; year of birth and date of birth are not.** The owner approved saving the
-   chess-results Ident-Number, read from each player's card (`art=9`). The card's "Year of birth" row is
-   never read or stored. Date of birth is never collected. Approved 2026-10-31.
+8. **Ident-Number and birth year collected.** The owner approved saving the chess-results Ident-Number, and
+   later approved storing date of birth for age categories (2026-10-31). The sources publish only a year:
+   the FIDE list's `birthday` field and the player card's "Year of birth" row each give a four-digit year.
+   Neither publishes a full date, so we store the birth year only. We never store a full date, and we never
+   return the year itself from the API: the API returns only the age category. Age categories follow the
+   convention in `backend/src/chessresults/age.ts`, to be confirmed against AICF rules.
 
 9. **Status of tournaments without dates.** A tournament is `ongoing` while the live lists show it, and
    `finished` once it has been absent for 36 hours. When dates are known, status follows the dates.
@@ -84,6 +87,21 @@ Owner: the project owner (s0.alively@gmail.com). Dates are when the owner confir
     upcoming, or recently finished events. Reason: the India archive holds about 9,000 events in one 90-day
     window alone, so a full backfill at the approved pacing would take months and load the source heavily.
 
+16. **Identity is verified from the player card.** A FIDE id or Ident-Number is shown only when it is
+    verified: FIDE ids from the official list or the player's card, Ident-Numbers from the card. Values from
+    a tournament's starting list are kept as unverified and are not shown until a card confirms them.
+    Audit on 2026-10-31: among stored FIDE ids that were not on the FIDE list, 13 of 25 sampled did not
+    match the player's card. Among list-matched ids, 25 of 25 matched. The unverified values were cleared
+    by migration 6, and their cards are re-queued for verification.
+
+17. **Player results are fetched on request.** Listing pages never fetch player data. Opening a player
+    profile queues a background refresh of that player's event cards (newest first, at most 40 events),
+    with a 60-second debounce per player. The response shows what is stored at that moment. Results are
+    stored in our database, so the site does not depend on chess-results being up.
+
 ## Open items
 
 - Grievance officer name and contact, to be published before the site leaves beta (decision 13).
+- Confirm the age-category convention in `age.ts` against AICF rules (decision 8).
+- Children's data: birth years of minors are stored. Confirm the privacy notice wording and the deletion
+  path cover them before the site leaves beta.

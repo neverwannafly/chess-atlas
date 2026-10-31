@@ -2,9 +2,12 @@ import db from "./database.js";
 import { parsePlace } from "../lib/place.js";
 import { addDays, todayIST } from "../lib/dates.js";
 
+/** Earliest date we accept from the archive (the archive window starts in 2024; older rows are kept without dates). */
+const ARCHIVE_EARLIEST = "2000-01-01";
+
 /** Finished tournaments are fetched (results, final pass) only this long after they end. */
 export const FETCH_FINISHED_DAYS = Number(process.env.CR_FETCH_FINISHED_DAYS ?? 180);
-import type { GameRow, ListRow, StandingRow, StartingRankRow, TournamentPage } from "../chessresults/parse.js";
+import type { CardRound, GameRow, ListRow, StandingRow, StartingRankRow, TournamentPage } from "../chessresults/parse.js";
 import { fideHash } from "./privacy.js";
 
 // Storage for the chess-results mirror, in normalised form. Each fact lives in one table:
@@ -82,7 +85,7 @@ function clubId(name: string | null): number | null {
  * tournament entry gets its own player row, so people can appear twice (see docs/DECISIONS.md).
  * Erased FIDE ids resolve to their anonymous replacement and never get their name back.
  */
-export function resolvePlayer(args: { name: string; fed: string | null; fideId: string | null; nowMs: number }): number {
+export function resolvePlayer(args: { name: string; fed: string | null; fideId: string | null; fideSource?: "starting" | "card"; nowMs: number }): number {
   const code = ensureFederation(args.fed);
   const name = args.name.replace(/\s+/g, " ").trim();
   if (args.fideId) {
@@ -95,8 +98,8 @@ export function resolvePlayer(args: { name: string; fed: string | null; fideId: 
       return hit.id;
     }
     return Number(
-      db.prepare("INSERT INTO players (fideId, name, nameKey, federationCode, createdAtMs, updatedAtMs) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(args.fideId, name, normaliseName(name), code, args.nowMs, args.nowMs).lastInsertRowid,
+      db.prepare("INSERT INTO players (fideId, fideIdSource, name, nameKey, federationCode, createdAtMs, updatedAtMs) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(args.fideId, args.fideSource ?? "starting", name, normaliseName(name), code, args.nowMs, args.nowMs).lastInsertRowid,
     );
   }
   return Number(
@@ -198,10 +201,13 @@ export function upsertArchive(rows: ArchiveTournament[], nowMs: number): number 
   let n = 0;
   db.transaction(() => {
     for (const r of rows) {
-      const status: Status = !r.startDate || !r.endDate ? "finished" : today < r.startDate ? "upcoming" : today > r.endDate ? "finished" : "ongoing";
+      // Dates from the source are sanity-checked: a start before the archive window or after the end is dropped.
+      const start = r.startDate && r.startDate >= ARCHIVE_EARLIEST && (!r.endDate || r.startDate <= r.endDate) ? r.startDate : null;
+      const end = r.endDate && r.endDate >= ARCHIVE_EARLIEST && (!start || r.endDate >= start) ? r.endDate : null;
+      const status: Status = !start || !end ? "finished" : today < start ? "upcoming" : today > end ? "finished" : "ongoing";
       const next = status === "finished" ? nowMs : status === "upcoming" ? nowMs + 24 * 3600_000 : nowMs + 30 * 60_000;
-      const retired = status === "finished" && r.endDate !== null && r.endDate < addDays(today, -FETCH_FINISHED_DAYS);
-      stmt.run({ id: r.id, name: r.name, loc: locationId(r.location), start: r.startDate, end: r.endDate, tc: r.timeControl, status, next: retired ? null : next, now: nowMs });
+      const retired = status === "finished" && end !== null && end < addDays(today, -FETCH_FINISHED_DAYS);
+      stmt.run({ id: r.id, name: r.name, loc: locationId(r.location), start, end, tc: r.timeControl, status, next: retired ? null : next, now: nowMs });
       n++;
     }
   })();
@@ -297,6 +303,9 @@ export function replaceStartingRank(id: string, rows: StartingRankRow[], nowMs: 
   db.transaction(() => {
     for (const r of rows) {
       const player = entryPlayer(id, r.snr, { name: r.name, fed: r.fed, fideId: r.fideId, nowMs });
+      if (r.identNumber) {
+        db.prepare("UPDATE players SET identNumber = ?, identSource = 'starting' WHERE id = ? AND identSource IS NULL").run(r.identNumber, player);
+      }
       upsertEntry(id, r.snr, player, r.rating, clubId(r.club));
     }
   })();
@@ -359,10 +368,15 @@ export function replaceRound(id: string, round: number, games: GameRow[], nowMs:
   })();
 }
 
+// A FIDE id is returned only when verified (decision 16). A removed player (privacy erasure) keeps the
+// row so pairings still add up, but gets no player id, so no page links to it.
+const VERIFIED_FIDE = (a: string) => `CASE WHEN ${a}.fideIdSource IN ('list','card') THEN ${a}.fideId END`;
+const PLAYER_ID = (a: string) => `CASE WHEN ${a}.nameKey <> 'removed' THEN ${a}.id END`;
+
 export function getStandings(id: string, limit: number) {
   const rows = db
     .prepare(
-      `SELECT s.snr, s.rank, s.points, p.id AS playerId, p.name, p.fideId, p.federationCode AS fed,
+      `SELECT s.snr, s.rank, s.points, ${PLAYER_ID("p")} AS playerId, p.name, ${VERIFIED_FIDE("p")} AS fideId, p.federationCode AS fed,
               f.title, e.ratingAtEvent AS rating, c.name AS club
        FROM standings s
        JOIN tournament_entries e ON e.tournamentId = s.tournamentId AND e.snr = s.snr
@@ -392,8 +406,10 @@ export function getRoundGames(id: string, round: number) {
   return db
     .prepare(
       `SELECT g.match, g.board, g.result,
-              g.whiteSnr, pw.name AS whiteName, pw.fideId AS whiteFideId, ew.ratingAtEvent AS whiteRating,
-              g.blackSnr, pb.name AS blackName, pb.fideId AS blackFideId, eb.ratingAtEvent AS blackRating
+              g.whiteSnr, ${PLAYER_ID("pw")} AS whitePlayerId, pw.name AS whiteName, ${VERIFIED_FIDE("pw")} AS whiteFideId,
+              ew.ratingAtEvent AS whiteRating, pw.federationCode AS whiteFed,
+              g.blackSnr, ${PLAYER_ID("pb")} AS blackPlayerId, pb.name AS blackName, ${VERIFIED_FIDE("pb")} AS blackFideId,
+              eb.ratingAtEvent AS blackRating, pb.federationCode AS blackFed
        FROM games g
        JOIN tournament_entries ew ON ew.tournamentId = g.tournamentId AND ew.snr = g.whiteSnr
        JOIN players pw ON pw.id = ew.playerId
@@ -451,7 +467,7 @@ export function identCandidates(limit: number, nowMs: number, recheckAfterMs: nu
        FROM players p
        JOIN tournament_entries e ON e.playerId = p.id
        JOIN tournaments t ON t.id = e.tournamentId
-       WHERE p.identNumber IS NULL AND p.nameKey <> 'removed'
+       WHERE (p.identSource IS NULL OR p.identSource <> 'card') AND p.nameKey <> 'removed'
          AND (t.status <> 'finished' OR t.endDate >= @recent)
          AND (p.identCheckedAtMs IS NULL OR p.identCheckedAtMs < @before)
          AND e.rowid = (SELECT MIN(e2.rowid) FROM tournament_entries e2 WHERE e2.playerId = p.id)
@@ -461,17 +477,31 @@ export function identCandidates(limit: number, nowMs: number, recheckAfterMs: nu
     .all({ before: nowMs - recheckAfterMs, limit, recent: addDays(todayIST(new Date(nowMs)), -FETCH_FINISHED_DAYS) }) as IdentCandidate[];
 }
 
-/** Stores what the player card showed. Players are never merged; a FIDE id is set only if free. */
-export function saveIdentCard(playerId: number, card: { identNumber: string | null; fideId: string | null }, nowMs: number): void {
+/**
+ * Stores what the player card showed. The card is authoritative for this player's Ident-Number and
+ * FIDE id. A FIDE id already held by another record is not moved: the duplicate stays separate.
+ */
+export function saveIdentCard(playerId: number, card: { identNumber: string | null; fideId: string | null; birthYear?: number | null }, nowMs: number): void {
   db.transaction(() => {
-    db.prepare("UPDATE players SET identCheckedAtMs = ?, identNumber = COALESCE(?, identNumber), updatedAtMs = ? WHERE id = ?")
-      .run(nowMs, card.identNumber, nowMs, playerId);
-    if (card.fideId) {
-      const erased = db.prepare("SELECT 1 FROM suppressed_fide_ids WHERE fideHash = ?").get(fideHash(card.fideId));
-      const taken = db.prepare("SELECT id FROM players WHERE fideId = ?").get(card.fideId) as { id: number } | undefined;
-      const own = db.prepare("SELECT fideId FROM players WHERE id = ?").get(playerId) as { fideId: string | null } | undefined;
-      if (!erased && !taken && !own?.fideId) db.prepare("UPDATE players SET fideId = ? WHERE id = ?").run(card.fideId, playerId);
+    if (card.birthYear) {
+      db.prepare("UPDATE players SET birthYear = ?, birthYearSource = 'card' WHERE id = ?").run(card.birthYear, playerId);
     }
+    if (card.identNumber) {
+      db.prepare("UPDATE players SET identNumber = ?, identSource = 'card' WHERE id = ?").run(card.identNumber, playerId);
+    }
+    const own = db.prepare("SELECT fideId, fideIdSource FROM players WHERE id = ?").get(playerId) as { fideId: string | null; fideIdSource: string | null };
+    if (card.fideId) {
+      const taken = db.prepare("SELECT id FROM players WHERE fideId = ? AND id <> ?").get(card.fideId, playerId);
+      const erased = db.prepare("SELECT 1 FROM suppressed_fide_ids WHERE fideHash = ?").get(fideHash(card.fideId));
+      if (!taken && !erased) {
+        const onList = db.prepare("SELECT 1 FROM fide_profiles WHERE fideId = ?").get(card.fideId);
+        db.prepare("UPDATE players SET fideId = ?, fideIdSource = ? WHERE id = ?").run(card.fideId, onList ? "list" : "card", playerId);
+      }
+    } else if (own.fideIdSource === "starting" || own.fideIdSource === null) {
+      // The card shows no FIDE id: an unverified value is dropped. A value from the official list stays.
+      db.prepare("UPDATE players SET fideId = NULL, fideIdSource = NULL WHERE id = ?").run(playerId);
+    }
+    db.prepare("UPDATE players SET identCheckedAtMs = ?, updatedAtMs = ? WHERE id = ?").run(nowMs, nowMs, playerId);
   })();
 }
 
@@ -486,4 +516,144 @@ export function identStats() {
             SUM(CASE WHEN identCheckedAtMs IS NOT NULL THEN 1 ELSE 0 END) AS checked
      FROM players WHERE nameKey <> 'removed'`,
   ).get() as { players: number; withIdent: number | null; checked: number | null };
+}
+
+// ---- player results (from player cards, fetched on request) --------------------------------
+
+export interface EntryToRefresh {
+  tournamentId: string;
+  snr: number;
+}
+
+/** A player's events, most recent first. Only events that have a start number are listed. */
+export function playerEntries(playerId: number, limit: number): EntryToRefresh[] {
+  return db.prepare(
+    `SELECT e.tournamentId, e.snr FROM tournament_entries e
+     LEFT JOIN tournaments t ON t.id = e.tournamentId
+     WHERE e.playerId = ? ORDER BY COALESCE(t.startDate, '0000') DESC LIMIT ?`,
+  ).all(playerId, limit) as EntryToRefresh[];
+}
+
+/** Stores one event's card results for a player and marks that event as fetched. */
+export function saveCardResults(playerId: number, tournamentId: string, snr: number, rounds: CardRound[], nowMs: number): void {
+  db.transaction(() => {
+    db.prepare("DELETE FROM player_card_rounds WHERE tournamentId = ? AND snr = ?").run(tournamentId, snr);
+    const ins = db.prepare(
+      `INSERT INTO player_card_rounds (tournamentId, snr, round, playerId, board, opponentSnr, color, result, fetchedAtMs)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const r of rounds) ins.run(tournamentId, snr, r.round, playerId, r.board, r.opponentSnr, r.color, r.result || null, nowMs);
+    db.prepare(
+      `INSERT INTO entry_card_fetch (tournamentId, snr, fetchedAtMs, ok) VALUES (?, ?, ?, 1)
+       ON CONFLICT(tournamentId, snr) DO UPDATE SET fetchedAtMs = excluded.fetchedAtMs, ok = 1`,
+    ).run(tournamentId, snr, nowMs);
+  })();
+}
+
+export function markCardFailed(tournamentId: string, snr: number, nowMs: number): void {
+  db.prepare(
+    `INSERT INTO entry_card_fetch (tournamentId, snr, fetchedAtMs, ok) VALUES (?, ?, ?, 0)
+     ON CONFLICT(tournamentId, snr) DO UPDATE SET fetchedAtMs = excluded.fetchedAtMs, ok = 0`,
+  ).run(tournamentId, snr, nowMs);
+}
+
+/**
+ * A player's results, newest event first, one row per round. Rounds come from the player's card when it
+ * has been fetched for that event (source "card"); otherwise they are read from the stored pairings of
+ * that event (source "pairings"). `result` is from this player's side: "1", "½", "0", "+" / "-" for a
+ * forfeit win or loss, or null while the game is unplayed.
+ */
+export function playerResults(playerId: number) {
+  return db.prepare(
+    `WITH mine AS (SELECT tournamentId, snr FROM tournament_entries WHERE playerId = @pid),
+     card AS (
+       SELECT r.tournamentId, r.snr, r.round, r.board, r.opponentSnr, r.color, r.result, r.fetchedAtMs, 'card' AS source
+       FROM player_card_rounds r WHERE r.playerId = @pid
+     ),
+     pairings AS (
+       SELECT g.tournamentId, m.snr, g.round, g.board,
+              CASE WHEN g.whiteSnr = m.snr THEN g.blackSnr ELSE g.whiteSnr END AS opponentSnr,
+              CASE WHEN g.whiteSnr = m.snr THEN 'w' ELSE 'b' END AS color,
+              CASE WHEN g.result IS NULL THEN NULL
+                   WHEN g.whiteSnr = m.snr THEN CASE g.result WHEN '1-0' THEN '1' WHEN '½-½' THEN '½' WHEN '+-' THEN '+' WHEN '-+' THEN '-' ELSE '0' END
+                   ELSE CASE g.result WHEN '0-1' THEN '1' WHEN '½-½' THEN '½' WHEN '-+' THEN '+' WHEN '+-' THEN '-' ELSE '0' END
+              END AS result,
+              rd.fetchedAtMs, 'pairings' AS source
+       FROM mine m
+       JOIN games g ON g.tournamentId = m.tournamentId AND (g.whiteSnr = m.snr OR g.blackSnr = m.snr)
+       JOIN rounds rd ON rd.tournamentId = g.tournamentId AND rd.round = g.round
+       WHERE NOT EXISTS (SELECT 1 FROM player_card_rounds c WHERE c.tournamentId = m.tournamentId AND c.snr = m.snr)
+     ),
+     rows AS (SELECT * FROM card UNION ALL SELECT * FROM pairings)
+     SELECT r.tournamentId, t.name AS tournament, t.startDate, t.endDate, r.snr, r.round, r.board,
+            r.opponentSnr, ${PLAYER_ID("op")} AS opponentPlayerId, op.name AS opponentName, ${VERIFIED_FIDE("op")} AS opponentFideId,
+            oe.ratingAtEvent AS opponentRating, op.federationCode AS opponentFed, ofp.title AS opponentTitle,
+            r.color, r.result, r.fetchedAtMs, r.source
+     FROM rows r
+     JOIN tournaments t ON t.id = r.tournamentId
+     LEFT JOIN tournament_entries oe ON oe.tournamentId = r.tournamentId AND oe.snr = r.opponentSnr
+     LEFT JOIN players op ON op.id = oe.playerId
+     LEFT JOIN fide_profiles ofp ON ofp.playerId = op.id
+     ORDER BY COALESCE(t.startDate, '0000') DESC, r.tournamentId DESC, r.round`,
+  ).all({ pid: playerId }) as PlayerResultRow[];
+}
+
+export interface PlayerResultRow {
+  tournamentId: string;
+  tournament: string;
+  startDate: string | null;
+  endDate: string | null;
+  snr: number;
+  round: number;
+  board: number | null;
+  opponentSnr: number | null;
+  opponentPlayerId: number | null;
+  opponentName: string | null;
+  opponentFideId: string | null;
+  opponentRating: number | null;
+  opponentFed: string | null;
+  opponentTitle: string | null;
+  color: "w" | "b" | null;
+  result: string | null;
+  fetchedAtMs: number;
+  source: "card" | "pairings";
+}
+
+export function entryCardFetchedAt(tournamentId: string, snr: number): number | null {
+  const row = db.prepare("SELECT fetchedAtMs FROM entry_card_fetch WHERE tournamentId = ? AND snr = ?").get(tournamentId, snr) as { fetchedAtMs: number } | undefined;
+  return row?.fetchedAtMs ?? null;
+}
+
+// ---- leases: one writer per tournament -----------------------------------------------------
+// A refresh talks to chess-results over the network, so it cannot hold a SQLite transaction for its whole
+// length. Instead it holds a lease on the tournament row: a compare-and-set that succeeds only when no
+// lease is held or the held one has expired. Every write checks the lease first, so a holder whose lease
+// expired (and was taken by someone else) cannot overwrite the newer writer's rows.
+
+export class LeaseLost extends Error {
+  constructor(id: string) {
+    super(`lease lost for tournament ${id}`);
+  }
+}
+
+export function acquireLease(id: string, token: string, nowMs: number, ttlMs: number): boolean {
+  const r = db.prepare(
+    `UPDATE tournaments SET lockToken = @token, lockUntilMs = @until
+     WHERE id = @id AND (lockUntilMs IS NULL OR lockUntilMs < @now)`,
+  ).run({ id, token, now: nowMs, until: nowMs + ttlMs });
+  return r.changes === 1;
+}
+
+export function assertLease(id: string, token: string, nowMs: number): void {
+  const r = db.prepare("SELECT 1 FROM tournaments WHERE id = ? AND lockToken = ? AND lockUntilMs >= ?").get(id, token, nowMs);
+  if (!r) throw new LeaseLost(id);
+}
+
+export function releaseLease(id: string, token: string): void {
+  db.prepare("UPDATE tournaments SET lockToken = NULL, lockUntilMs = NULL WHERE id = ? AND lockToken = ?").run(id, token);
+}
+
+/** Tournaments currently leased by someone else are not due for the worker right now. */
+export function isLeased(id: string, nowMs: number): boolean {
+  return !!db.prepare("SELECT 1 FROM tournaments WHERE id = ? AND lockUntilMs >= ?").get(id, nowMs);
 }

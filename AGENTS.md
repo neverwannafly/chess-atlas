@@ -11,7 +11,8 @@ Rules that come straight from the decisions:
 
 - India only. Do not add other markets.
 - Do not merge players by name. Player records are linked only by FIDE id or chess-results Ident-Number.
-- Do not store dates of birth or years of birth. Never read the "Year of birth" row of a player card.
+- Store birth years only, never full dates (the sources publish years only). Never return a birth year from
+  the API; return the age category. Never read or store the card's "Year of birth" beyond that year.
 - Keep player-card fetching within the pacing in decision 12.
 - Do not call FIDE's undocumented JSON endpoint. Use the official monthly list.
 - Keep the chess-results mirror inside the approved use: link back to the source and do not reproduce

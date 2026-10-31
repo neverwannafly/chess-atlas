@@ -142,6 +142,7 @@ export const splitPhones = (p: string) =>
 export function sectionsFor(e: EventDetail) {
   const d = e.details;
   const s: { id: string; title: string }[] = [{ id: "overview", title: "Overview" }];
+  if (e.chessResults) s.push({ id: "standings", title: "Live standings" });
   if (d && hasPrizes(d.prizes)) s.push({ id: "prizes", title: "Prizes" });
   if (d && (d.entryFees.length || d.registration.notes || d.registration.deadline)) s.push({ id: "entry", title: "Entry fees" });
   if (d && d.schedule.length) s.push({ id: "schedule", title: "Schedule" });

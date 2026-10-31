@@ -4,6 +4,8 @@ import { ApiError, wrap } from "../lib/http.js";
 import { CR_BASE } from "../chessresults/client.js";
 import * as store from "../db/chessresults.js";
 import { getPlayerDetail, searchPlayers } from "../db/players.js";
+import { requestPlayerRefresh } from "../chessresults/lazy.js";
+import { settleLiveRefresh, startLiveRefresh } from "../chessresults/live.js";
 
 const router = Router();
 
@@ -67,20 +69,28 @@ router.get(
 
 router.get(
   "/chessresults/tournaments/:id",
-  wrap((req, res) => {
-    const id = idParam.safeParse(req.params.id);
-    const t = id.success ? store.getTournamentRow(id.data) : undefined;
-    if (!t) throw new ApiError(404, "NOT_FOUND", "Tournament not mirrored");
-    res.set("Cache-Control", CACHE);
-    res.json({
-      data: {
-        ...present(t),
-        standings: store.getStandings(t.id, 500),
-        roundList: store.getRounds(t.id),
-      },
-      meta: { source: SOURCE },
-    });
-  }),
+  async (req, res, next) => {
+    try {
+      const id = idParam.safeParse(req.params.id);
+      const t = id.success ? store.getTournamentRow(id.data) : undefined;
+      if (!t) throw new ApiError(404, "NOT_FOUND", "Tournament not mirrored");
+      // Ongoing tournaments are refreshed on this request if our copy is 5 minutes old or more.
+      const start = startLiveRefresh(t.id);
+      const state = await settleLiveRefresh(start);
+      const fresh = store.getTournamentRow(t.id) ?? t;
+      res.set("Cache-Control", "no-cache");
+      res.json({
+        data: {
+          ...present(fresh),
+          standings: store.getStandings(t.id, 500),
+          roundList: store.getRounds(t.id),
+        },
+        meta: { source: SOURCE, refresh: { state, reason: start.reason, lastRefreshedAt: iso(fresh.lastFetchedAtMs) } },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 );
 
 router.get(
@@ -111,8 +121,17 @@ router.get(
     const id = z.coerce.number().int().positive().safeParse(req.params.id);
     const detail = id.success ? getPlayerDetail(id.data) : null;
     if (!detail) throw new ApiError(404, "NOT_FOUND", "Player not found");
-    res.set("Cache-Control", CACHE_LONG);
-    res.json({ data: detail, meta: { source: SOURCE } });
+    // Results are refreshed on request, in the background. This response shows what is stored now.
+    const refresh = requestPlayerRefresh(id.data as number);
+    const results = store.playerResults(id.data as number);
+    const last = results.reduce((m, r) => Math.max(m, r.fetchedAtMs ?? 0), 0);
+    res.set("Cache-Control", "no-cache");
+    res.json({
+      data: { ...detail, results },
+      // `state` is "queued" when this request started a background refresh. A `state` set by the refresh
+      // module itself (e.g. "in_progress") takes precedence.
+      meta: { source: SOURCE, refresh: { state: refresh.queued ? "queued" : "idle", ...refresh, lastRefreshedAt: iso(last) } },
+    });
   }),
 );
 

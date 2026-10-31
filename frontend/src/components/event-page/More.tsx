@@ -5,7 +5,7 @@ import type { EventSummary } from "@/types/event";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EASE } from "@/components/event-page/motion";
 import { useRelatedEvents } from "@/hooks/queries";
-import { displayName } from "@/lib/eventFacts";
+import { displayName, eventPath } from "@/lib/eventFacts";
 import { addDays, formatMoney, todayIST } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ function Row({ e, i }: { e: EventSummary; i: number }) {
       transition={{ duration: 0.45, ease: EASE, delay: i * 0.05 }}
     >
       <Link
-        to={`/events/${e.eventCode}`}
+        to={eventPath(e)}
         viewTransition
         className="group grid grid-cols-[3.25rem_minmax(0,1fr)_auto] items-center gap-4 rounded-md px-3 py-3 transition-colors hover:bg-surface-2"
       >

@@ -62,3 +62,9 @@ export function useRelatedEvents(e: { eventCode: string; state: string | null; s
 import { fetchInsights } from "@/lib/api";
 
 export const useInsights = () => useQuery({ queryKey: ["insights"], queryFn: fetchInsights, staleTime: 10 * MIN });
+
+// ---------------------------------------------------------------- freshness
+import { fetchHealth } from "@/lib/api";
+
+/** When the AICF calendar was last scraped; feeds the source line on calendar pages. */
+export const useHealth = () => useQuery({ queryKey: ["health"], queryFn: fetchHealth, staleTime: 5 * MIN });

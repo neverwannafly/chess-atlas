@@ -5,7 +5,8 @@ import { SearchField } from "@/components/ui/SearchField";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/States";
 import { PageHead, TitleBadge } from "@/components/cr/common";
-import { useDebounced, usePlayerSearch } from "@/hooks/crQueries";
+import { useCrStatus, useDebounced, usePlayerSearch } from "@/hooks/crQueries";
+import { EmptyNote, SourceLine, SOURCES } from "@/components/Trust";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { playerName, shell } from "@/lib/chessresults";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ export default function PlayersPage() {
   const q = useDebounced(text.trim(), 300);
   const input = useRef<HTMLInputElement>(null);
   const { data, isFetching, isError, error, refetch, isPlaceholderData } = usePlayerSearch(q);
+  const mirror = useCrStatus();
 
   useEffect(() => { input.current?.focus(); }, []);
   useEffect(() => {
@@ -30,17 +32,18 @@ export default function PlayersPage() {
     <div className={shell}>
       <PageHead title="Players">Search anyone who has played in a mirrored Indian tournament. Profiles show FIDE ratings over time and every event on record.</PageHead>
       <SearchField ref={input} id="player-search" value={text} onChange={setText} size="lg" className="mt-6 max-w-xl" placeholder="Name or FIDE ID" label="Search players" shortcut={false} />
-      <p className="mt-2 text-small text-subtle" aria-live="polite">
+      <SourceLine sources={[SOURCES.chessResults, SOURCES.fide]} refreshedAt={mirror.data ? mirror.data.lastRefreshedAt : undefined} verb="mirror refreshed" className="mt-3" />
+      <p className="mt-4 text-small text-subtle" aria-live="polite">
         {!ready ? "Type at least 2 characters." : isFetching && !data ? "Searching…" : `${rows.length === 25 ? "First 25" : rows.length} ${rows.length === 1 ? "match" : "matches"}`}
       </p>
 
       <div className="mt-6 max-w-3xl">
         {ready && isError ? (
-          <ErrorState message={(error as Error).message} onRetry={() => refetch()} />
+          <ErrorState title="Couldn't search players" message={(error as Error).message} onRetry={() => refetch()} />
         ) : ready && !data && isFetching ? (
           <div className="space-y-2" role="status" aria-label="Searching players">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
         ) : ready && rows.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border-strong px-4 py-10 text-center text-body text-muted">No players match “{q}”.</p>
+          <EmptyNote title={`No players match “${q}”`}>Try the surname only, or a FIDE id. Players appear once they have played in a mirrored Indian tournament.</EmptyNote>
         ) : rows.length > 0 ? (
           <ul className={cn("divide-y divide-border/70 overflow-hidden rounded-md border border-border bg-surface shadow-e1 transition-opacity", isPlaceholderData && "opacity-60")}>
             {rows.map((p) => (

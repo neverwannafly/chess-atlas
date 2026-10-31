@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PageHead } from "@/components/cr/common";
+import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { shell } from "@/lib/chessresults";
 
@@ -17,9 +18,10 @@ export default function PrivacyPage() {
           Chess Atlas lists chess tournaments in India and shows results and ratings for the players in them.
           This notice explains what personal data we hold, why, where it comes from, and what you can do about it.
         </p>
-        <p className="mt-4 rounded-md border border-border px-4 py-3 text-small">
-          <strong>Beta.</strong> Chess Atlas is in beta. Some details are still being completed, and this notice will
-          be updated soon.
+        <p className="mt-6 flex gap-3 rounded-md border border-border bg-surface px-4 py-3 text-small shadow-e1">
+          <span className="mt-px inline-flex h-5 shrink-0 items-center rounded-sm border border-border-strong px-1.5 text-[11px] font-medium uppercase leading-none tracking-[0.08em] text-muted" aria-hidden>Beta</span>
+          <span><strong>Beta.</strong> Chess Atlas is in beta. Some details are still being completed, and this notice will
+          be updated soon.</span>
         </p>
 
         <h2 className={H2}>What we hold</h2>
@@ -31,7 +33,7 @@ export default function PrivacyPage() {
           <li><strong>FIDE title and FIDE rating history</strong>, from FIDE's published monthly rating list.</li>
           <li><strong>Tournament results</strong>: standings, rounds, pairings and game results.</li>
         </ul>
-        <p className={P}>We do <strong>not</strong> hold dates of birth or years of birth.</p>
+        <p className={P}>We hold a <strong>year of birth</strong> for some players, from FIDE's published list or the player's chess-results card. We do <strong>not</strong> hold full dates of birth, because neither source publishes them. We use the year only to show an age category (for example U14). The year itself is not shown on this site.</p>
 
         <h2 className={H2}>Where it comes from</h2>
         <ul className={UL}>
@@ -74,9 +76,7 @@ export default function PrivacyPage() {
           sites. Ask them directly for that.
         </p>
         <p className="mt-6">
-          <Link to="/privacy/delete" className="inline-flex h-9 items-center rounded-sm border border-border-strong bg-surface px-3.5 text-ui font-medium text-fg shadow-e1 hover:bg-surface-2">
-            Request deletion
-          </Link>
+          <Button asChild variant="secondary"><Link to="/privacy/delete">Request deletion</Link></Button>
         </p>
 
         <h2 className={H2}>Who is responsible</h2>

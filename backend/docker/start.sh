@@ -1,7 +1,7 @@
 #!/bin/sh
-# Runs the API and the chess-results worker in one container.
-# The worker schedules itself every 30 minutes (node-cron); if either process exits, the container exits
-# so the platform restarts it.
+# One container, two processes: the API serves /api/* and the SPA; the chess-results worker runs its own
+# 30-minute cron. They share one SQLite file on the volume, so both must run in the same container.
+# If either process exits, the container exits and the platform restarts it.
 set -u
 
 node dist/chessresults/main.js &

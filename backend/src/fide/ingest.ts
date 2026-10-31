@@ -29,6 +29,8 @@ export interface FideRecord {
   sex: "M" | "F" | null;
   title: string | null;
   inactive: boolean;
+  /** Birth year as published in the FIDE list (the list gives a year only). */
+  birthYear: number | null;
   ratings: Record<RatingList, ListRating>;
 }
 
@@ -115,6 +117,12 @@ function rated(fields: Map<string, string>, prefix: string): ListRating {
 }
 
 /** Converts one <player> block to a record; null if it is not a usable IND record. */
+/** A four-digit year, or null. Full dates are not published by FIDE, so anything else is dropped. */
+export function yearOf(raw: string | undefined): number | null {
+  const t = (raw ?? "").trim();
+  return /^(19|20)\d{2}$/.test(t) ? Number(t) : null;
+}
+
 export function parsePlayerBlock(block: string, country = FED): FideRecord | null {
   const fields = new Map<string, string>();
   const re = /<([a-z_]+)>([^<]*)<\/\1>/g;
@@ -133,6 +141,7 @@ export function parsePlayerBlock(block: string, country = FED): FideRecord | nul
     sex: sex === "M" || sex === "F" ? sex : null,
     title: title || null,
     inactive: /i/i.test(fields.get("flag") ?? ""),
+    birthYear: yearOf(fields.get("birthday")),
     ratings: { standard: rated(fields, ""), rapid: rated(fields, "rapid_"), blitz: rated(fields, "blitz_") },
   };
 }
@@ -205,6 +214,7 @@ export function upsertRecords(db: Db, records: FideRecord[], period: string, now
         id = Number(s.insert.run(r.fideId, r.name, key, r.federationCode, nowMs, nowMs).lastInsertRowid);
         if (stats) stats.playersCreated++;
       }
+      if (r.birthYear !== null) db.prepare("UPDATE players SET birthYear = ?, birthYearSource = 'fide' WHERE id = ?").run(r.birthYear, id);
       s.profile.run(id, r.fideId, r.title, r.sex, r.federationCode, r.inactive ? 1 : 0, SOURCE, nowMs);
       for (const list of ["standard", "rapid", "blitz"] as const) {
         const x = r.ratings[list];

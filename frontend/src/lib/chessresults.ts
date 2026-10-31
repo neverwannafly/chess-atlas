@@ -21,15 +21,18 @@ export async function fetchCrTournaments(query: CrQuery): Promise<CrPage<CrTourn
   const p = new URLSearchParams();
   if (query.status) p.set("status", query.status);
   if (query.fed) p.set("fed", query.fed);
-  if (query.q?.trim()) p.set("q", query.q.trim());
+  if (query.q) p.set("q", query.q);
   if (query.page) p.set("page", String(query.page));
   if (query.pageSize) p.set("pageSize", String(query.pageSize));
-  return get("/api/chessresults/tournaments", p);
+  return get<CrPage<CrTournament>>(`/api/chessresults/tournaments?${p.toString()}`);
 }
 
 export async function fetchCrTournament(id: string): Promise<CrTournamentDetail> {
   if (MOCK) return (await mocks()).mockCrTournament(id);
-  return (await get<{ data: CrTournamentDetail }>(`/api/chessresults/tournaments/${encodeURIComponent(id)}`)).data;
+  const body = await get<{ data: CrTournamentDetail; meta?: { refresh?: CrTournamentDetail["refresh"] } }>(
+    `/api/chessresults/tournaments/${encodeURIComponent(id)}`,
+  );
+  return { ...body.data, refresh: body.meta?.refresh };
 }
 
 export async function fetchCrRound(id: string, round: number): Promise<CrGame[]> {
@@ -49,7 +52,8 @@ export async function searchPlayers(q: string): Promise<PlayerHit[]> {
 
 export async function fetchPlayer(id: string): Promise<PlayerDetail> {
   if (MOCK) return (await mocks()).mockPlayer(id);
-  return (await get<{ data: PlayerDetail }>(`/api/players/${encodeURIComponent(id)}`)).data;
+  const body = await get<{ data: PlayerDetail; meta?: { refresh?: PlayerDetail["refresh"] } }>(`/api/players/${encodeURIComponent(id)}`);
+  return { ...body.data, refresh: body.meta?.refresh };
 }
 
 export const fideProfileUrl = (fideId: string) => `https://ratings.fide.com/profile/${encodeURIComponent(fideId)}`;

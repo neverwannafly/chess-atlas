@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { parsePlace } from "../lib/place.js";
+import { pickEventSlug } from "../lib/slug.js";
 
 type Db = InstanceType<typeof Database>;
 
@@ -308,6 +309,120 @@ export const migrations: Migration[] = [
         ALTER TABLE players ADD COLUMN identCheckedAtMs INTEGER;
         CREATE INDEX idx_players_ident ON players(identNumber);
       `);
+    },
+  },
+  {
+    version: 6,
+    name: "data correctness: provenance for FIDE ids and Ident-Numbers; clear unverified FIDE ids",
+    up(db) {
+      db.exec(`
+        ALTER TABLE players ADD COLUMN fideIdSource TEXT CHECK (fideIdSource IN ('list','card','starting') OR fideIdSource IS NULL);
+        ALTER TABLE players ADD COLUMN identSource TEXT CHECK (identSource IN ('card','starting') OR identSource IS NULL);
+      `);
+      // FIDE ids that match the official list are verified.
+      db.exec(`UPDATE players SET fideIdSource = 'list' WHERE fideId IN (SELECT fideId FROM fide_profiles);`);
+      // Earlier starting-list parsing read the chess-results ID column as the FIDE id. Those values are
+      // unverified: clear them so they are not shown, and re-queue their player cards for verification.
+      db.exec(`
+        UPDATE players SET fideId = NULL WHERE fideIdSource IS NULL AND fideId IS NOT NULL;
+        UPDATE players SET identCheckedAtMs = NULL WHERE fideIdSource IS NULL;
+      `);
+      // Ident-Numbers so far all came from player cards.
+      db.exec(`UPDATE players SET identSource = 'card' WHERE identNumber IS NOT NULL;`);
+    },
+  },
+  {
+    version: 7,
+    name: "player results from player cards, fetched on request",
+    up(db) {
+      db.exec(`
+        -- One row per round of a player's result in one event (from the player card).
+        CREATE TABLE player_card_rounds (
+          tournamentId TEXT NOT NULL,
+          snr INTEGER NOT NULL,
+          round INTEGER NOT NULL,
+          playerId INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          board INTEGER,
+          opponentSnr INTEGER,
+          color TEXT CHECK (color IN ('w','b') OR color IS NULL),
+          result TEXT,
+          fetchedAtMs INTEGER NOT NULL,
+          PRIMARY KEY (tournamentId, snr, round)
+        );
+        CREATE INDEX idx_card_rounds_player ON player_card_rounds(playerId);
+
+        -- When each event's card was last fetched for a player (drives the on-request refresh).
+        CREATE TABLE entry_card_fetch (
+          tournamentId TEXT NOT NULL,
+          snr INTEGER NOT NULL,
+          fetchedAtMs INTEGER NOT NULL,
+          ok INTEGER NOT NULL DEFAULT 1,
+          PRIMARY KEY (tournamentId, snr)
+        );
+      `);
+    },
+  },
+  {
+    version: 8,
+    name: "birth year for age categories (year only: the sources publish no full date)",
+    up(db) {
+      db.exec(`
+        ALTER TABLE players ADD COLUMN birthYear INTEGER;
+        ALTER TABLE players ADD COLUMN birthYearSource TEXT CHECK (birthYearSource IN ('fide','card') OR birthYearSource IS NULL);
+      `);
+    },
+  },
+  {
+    version: 9,
+    name: "tournament leases: one writer per tournament across worker and on-request refresh",
+    up(db) {
+      db.exec(`
+        ALTER TABLE tournaments ADD COLUMN lockToken TEXT;
+        ALTER TABLE tournaments ADD COLUMN lockUntilMs INTEGER;
+      `);
+    },
+  },
+  {
+    version: 10,
+    name: "event slugs: human-readable URL key, unique, backfilled from the event name",
+    up(db) {
+      // SQLite cannot add a UNIQUE column directly, so add it plain, backfill, then index it.
+      db.exec("ALTER TABLE events ADD COLUMN slug TEXT");
+      const rows = db.prepare("SELECT id, name, startDate FROM events ORDER BY startDate, id").all() as
+        { id: number; name: string; startDate: string }[];
+      const taken = new Set<string>();
+      const upd = db.prepare("UPDATE events SET slug = ? WHERE id = ?");
+      for (const r of rows) {
+        const slug = pickEventSlug(r.name, r.startDate, (s) => taken.has(s));
+        taken.add(slug);
+        upd.run(slug, r.id);
+      }
+      db.exec("CREATE UNIQUE INDEX idx_events_slug ON events(slug)");
+    },
+  },
+  {
+    version: 11,
+    name: "event to chess-results tournament links (automatic by name and date, or manual)",
+    up(db) {
+      db.exec(`
+        CREATE TABLE event_chess_results (
+          eventCode TEXT PRIMARY KEY,
+          tournamentId TEXT NOT NULL,
+          method TEXT NOT NULL CHECK (method IN ('auto','manual')),
+          score REAL,
+          matchedAtMs INTEGER NOT NULL
+        );
+        CREATE INDEX idx_ecr_tournament ON event_chess_results(tournamentId);
+      `);
+    },
+  },
+  {
+    version: 12,
+    name: "re-walk rounds for tournaments that have no stored games (round parser fix)",
+    up(db) {
+      // The round parser dropped every game in tables without a start-number column. Those tournaments
+      // were marked as walked; clear the flag so the next refresh walks their rounds again.
+      db.exec(`UPDATE tournaments SET backfilled = 0 WHERE id NOT IN (SELECT DISTINCT tournamentId FROM games);`);
     },
   },
 ];

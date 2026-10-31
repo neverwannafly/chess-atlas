@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
+import { eventPath } from "@/lib/eventFacts";
 import type { InsightBand, InsightEvent, InsightsScope } from "@/types/event";
 import { formatDateRange, formatInr } from "@/lib/format";
 import { EASE, formatColor, place, useReveal } from "./viz";
@@ -60,7 +61,7 @@ function EventLine({ e, value, sub, frac, i, shown, reduce, scopeKey }: {
 }) {
   return (
     <li>
-      <Link to={`/events/${encodeURIComponent(e.eventCode)}`} className="group -mx-2 grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-start gap-x-3 rounded-sm px-2 py-2.5 transition-colors hover:bg-surface-2">
+      <Link to={eventPath(e)} className="group -mx-2 grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-start gap-x-3 rounded-sm px-2 py-2.5 transition-colors hover:bg-surface-2">
         <span className="pt-0.5 text-label text-subtle tabular-nums">{i + 1}</span>
         <span className="min-w-0">
           <span className="line-clamp-2 text-ui font-medium group-hover:text-fg sm:line-clamp-1">{e.name}</span>

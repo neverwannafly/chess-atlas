@@ -31,6 +31,7 @@ async function ingestFideIfNeeded(why: string): Promise<void> {
     const zipPath = await downloadList("combined", dir);
     const stats = await ingestMonthlyList({ period, db, zipPath });
     setMeta(FIDE_PERIOD_KEY, period);
+    fs.rmSync(zipPath, { force: true }); // free ~51 MB on the volume
     console.log(`[fide] ${why}: ingested ${period}`, JSON.stringify(stats));
   } catch (err) {
     console.error(`[fide] ${why} ingest failed:`, (err as Error).message);

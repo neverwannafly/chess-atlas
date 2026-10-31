@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { CrPage, CrTournament } from "@/types/chessresults";
 import {
   fetchCrRound, fetchCrStatus, fetchCrTournament, fetchCrTournaments, fetchPlayer, searchPlayers, type CrQuery,
 } from "@/lib/chessresults";
+import { refreshPollDelay } from "@/lib/playerRecord";
 
 const MIN = 60_000;
 const notFound = (n: number, e: unknown) => (e as { status?: number }).status !== 404 && n < 2;
@@ -17,8 +18,9 @@ export const useLiveTournaments = () =>
     staleTime: 30_000,
   });
 
-export function useCrTournaments(query: CrQuery) {
+export function useCrTournaments(query: CrQuery, refetchInterval: number | false = false) {
   return useInfiniteQuery({
+    refetchInterval,
     queryKey: ["cr", "infinite", query],
     queryFn: ({ pageParam }) => fetchCrTournaments({ ...query, page: pageParam, pageSize: query.pageSize ?? 50 }),
     initialPageParam: 1,
@@ -44,7 +46,8 @@ export const useCrTournament = (id: string, live: boolean) =>
     queryKey: ["cr", "tournament", id],
     queryFn: () => fetchCrTournament(id),
     staleTime: 30_000,
-    refetchInterval: live ? MIN : false,
+    // While the server is still refreshing this tournament, poll quickly; otherwise on the live cadence.
+    refetchInterval: (q) => (q.state.data?.refresh?.state === "in_progress" ? 4_000 : live ? MIN : false),
     retry: notFound,
   });
 
@@ -69,8 +72,29 @@ export const usePlayerSearch = (q: string) =>
     placeholderData: keepPreviousData,
   });
 
-export const usePlayer = (id: string) =>
-  useQuery({ queryKey: ["players", id], queryFn: () => fetchPlayer(id), staleTime: 5 * MIN, retry: notFound });
+/**
+ * Opening a player queues a background refresh of their results on the server. While that may still be
+ * running, re-read the player every few seconds (capped under the server's 60 s debounce, so the polls
+ * never queue a second refresh), then stop.
+ */
+export function usePlayer(id: string) {
+  const pollUntil = useRef<{ id: string; until: number } | null>(null);
+  return useQuery({
+    queryKey: ["players", id],
+    queryFn: async () => {
+      const p = await fetchPlayer(id);
+      const st = p.refresh?.state ?? (p.refresh?.queued ? "queued" : undefined);
+      if (st === "queued") pollUntil.current = { id, until: Date.now() + 50_000 };
+      return p;
+    },
+    staleTime: 5 * MIN,
+    retry: notFound,
+    refetchInterval: (q) => {
+      const until = pollUntil.current?.id === id ? pollUntil.current.until : null;
+      return refreshPollDelay(q.state.data?.refresh?.state, until, Date.now());
+    },
+  });
+}
 
 export function useDebounced<T>(value: T, ms = 250): T {
   const [v, setV] = useState(value);

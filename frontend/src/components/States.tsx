@@ -54,13 +54,13 @@ export function EmptyState({ suggestions, onClear, title = "No tournaments match
   );
 }
 
-export function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
+export function ErrorState({ message, onRetry, title = "Couldn't load tournaments" }: { message?: string; onRetry: () => void; title?: string }) {
   return (
     <div role="alert" className="px-4 py-16 text-center">
       <DotGlyph tone="danger" />
       <h2 className="mt-5 flex items-center justify-center gap-2 text-h3 font-semibold tracking-h3 text-fg">
         <AlertTriangle className="h-4 w-4 text-danger" aria-hidden />
-        Couldn't load tournaments
+        {title}
       </h2>
       <p className="mx-auto mt-1.5 max-w-sm text-body text-muted">{message ?? "The server didn't respond."}</p>
       <Button className="mt-5" variant="secondary" onClick={onRetry}><RotateCcw aria-hidden />Try again</Button>

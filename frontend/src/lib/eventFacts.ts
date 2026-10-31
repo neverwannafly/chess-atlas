@@ -206,3 +206,6 @@ export function rowFacts(e: EventSummary, detail?: EventDetail | null, today = t
     dayOf: live && span > 1 ? `Day ${daysBetween(e.startDate, today) + 1} of ${span}` : null,
   };
 }
+
+/** Public URL for an event: the slug, or the numeric eventCode when a payload has no slug. */
+export const eventPath = (e: { slug?: string | null; eventCode: string }) => `/events/${encodeURIComponent(e.slug || e.eventCode)}`;

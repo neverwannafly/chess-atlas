@@ -132,12 +132,12 @@ test("parseStartingRank reads FIDE ids from the starting-rank table and tolerate
     <h2>Pairings</h2><table><tr><td><a href="x.aspx?snr=99">Not a starting-rank row</a></td></tr></table></body></html>`;
   const rows = parseStartingRank(html);
   assert.deepEqual(rows, [
-    { snr: 1, name: "Sample, Ravi", fideId: "525057278", fed: "TUR", rating: 1427, club: "Ankara" },
-    { snr: 2, name: "Demo, Meera", fideId: null, fed: "TUR", rating: null, club: null },
+    { snr: 1, name: "Sample, Ravi", identNumber: null, fideId: "525057278", fed: "TUR", rating: 1427, club: "Ankara" },
+    { snr: 2, name: "Demo, Meera", identNumber: null, fideId: null, fed: "TUR", rating: null, club: null },
   ]);
 });
 
-test("parsePlayerCard reads Ident-Number and Fide-ID but never the year of birth", async () => {
+test("parsePlayerCard reads Ident-Number, Fide-ID and year of birth (year only)", async () => {
   const { parsePlayerCard } = await import("./parse.js");
   const html = `<table class="CRs1">
     <tr><td class="CR">Name</td><td class="CR">Sample Player</td></tr>
@@ -145,7 +145,6 @@ test("parsePlayerCard reads Ident-Number and Fide-ID but never the year of birth
     <tr><td class="CR">Fide-ID</td><td class="CR">33000001</td></tr>
     <tr><td class="CR">Year of birth </td><td class="CR">2010</td></tr></table>`;
   const card = parsePlayerCard(html);
-  assert.deepEqual(card, { identNumber: "1234567890", fideId: "33000001" });
-  assert.equal(Object.keys(card).includes("yearOfBirth"), false);
-  assert.deepEqual(parsePlayerCard("<table><tr><td>Ident-Number</td><td></td></tr></table>"), { identNumber: null, fideId: null });
+  assert.deepEqual(card, { identNumber: "1234567890", fideId: "33000001", birthYear: 2010 });
+  assert.deepEqual(parsePlayerCard("<table><tr><td>Ident-Number</td><td></td></tr></table>"), { identNumber: null, fideId: null, birthYear: null });
 });

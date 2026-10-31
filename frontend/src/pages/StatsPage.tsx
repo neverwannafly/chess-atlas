@@ -2,7 +2,8 @@ import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { ErrorState } from "@/components/States";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useInsights } from "@/hooks/queries";
+import { useHealth, useInsights } from "@/hooks/queries";
+import { SourceLine, SOURCES } from "@/components/Trust";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { cn } from "@/lib/utils";
 import { EASE, VIZ_VARS } from "@/components/insights/viz";
@@ -30,6 +31,7 @@ function Loading() {
 export default function StatsPage() {
   useDocumentMeta("Insights", "The Indian chess tournament calendar in numbers: when and where events happen, formats, prize funds, entry fees and category prizes.");
   const { data, isError, error, refetch } = useInsights();
+  const health = useHealth();
   const [scope, setScope] = useState<Scope>("upcoming");
   const reduce = useReducedMotion();
   const s = data?.[scope];
@@ -92,7 +94,8 @@ export default function StatsPage() {
               <Rhythm scope={s} scopeKey={scope} />
               <CategoryPrizes scope={s} scopeKey={scope} />
             </div>
-            <p className="pt-4 text-center text-label text-subtle">
+            <SourceLine sources={[SOURCES.aicf]} refreshedAt={health.data ? health.data.lastScrapeAt : undefined} verb="calendar checked" className="justify-center pt-4" />
+            <p className="text-center text-label text-subtle">
               Counts cover {data.all.total} AICF events since {data.months[0] ? new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${data.months[0].month}-01T00:00:00Z`)) : ""}; money, formats and categories come from {data.all.withDetails} parsed brochures. Confirm details with organisers.
             </p>
           </div>

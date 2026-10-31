@@ -35,7 +35,7 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <DiscoverPage /> },
-      { path: "events/:eventCode", element: lazyEl(<EventPage />) },
+      { path: "events/:slug", element: lazyEl(<EventPage />) },
       { path: "insights", element: lazyEl(<StatsPage />) },
       { path: "live", element: lazyEl(<LivePage />) },
       { path: "tournaments", element: lazyEl(<CrTournamentsPage />) },

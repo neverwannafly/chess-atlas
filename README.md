@@ -80,7 +80,7 @@ CHESSRESULTS_USER_AGENT="ChessAtlasBot/1.0 (contact: <ops email>)" npm run chess
 - Discovery is limited to the home page (current and recent events). Older tournaments are not discovered yet.
 
 Environment: `CR_MIN_INTERVAL_MS` (default 3000), `CR_REQUESTS_PER_CYCLE` (default 300).
-The worker needs to run as a second process in production; the current Dockerfile starts only the API.
+The worker needs to run as a second process in production; the current Dockerfile now builds two targets: the API (default) and the worker (see docs/DEPLOY.md).
 
 ## Environment
 

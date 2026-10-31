@@ -113,7 +113,7 @@ export function buildFixtures(): EventDetail[] {
     const d = ex ? details(r, startDate, endDate) : null;
     const hasBrochure = i % 11 !== 10;
     return {
-      eventCode: code, name, startDate, endDate, city, state, status,
+      eventCode: code, slug: code, name, startDate, endDate, city, state, status,
       brochureUrl: hasBrochure ? "https://example.com/brochure.pdf" : null,
       extractionStatus: ex ? "done" : hasBrochure ? (i % 5 === 0 ? "failed" : "pending") : "no_brochure",
       tagline: d?.tagline ?? null,

@@ -6,6 +6,8 @@ import type { CrStatus, CrTournament } from "@/types/chessresults";
 import { Segmented } from "@/components/ui/Segmented";
 import { SearchField } from "@/components/ui/SearchField";
 import { ErrorState } from "@/components/States";
+import { Button } from "@/components/ui/button";
+import { EmptyNote } from "@/components/Trust";
 import { PageHead, SourceNote, StatusPill } from "@/components/cr/common";
 import { useCrCount, useCrTournaments, useDebounced } from "@/hooks/crQueries";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -48,7 +50,7 @@ function Row({ t, showStatus }: { t: CrTournament; showStatus: boolean }) {
             to={`/tournaments/${t.id}`}
             className="outline-none after:absolute after:inset-0 after:z-10 after:rounded-sm after:content-[''] focus-visible:after:outline-2 focus-visible:after:outline-offset-[-2px] focus-visible:after:outline-accent"
           >
-            {t.status === "ongoing" && <span className="pulse-dot mr-1.5 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-accent align-middle" aria-label="Live" />}
+            {t.status === "ongoing" && <span className="pulse-dot mr-1.5 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-live align-middle" aria-label="Live" />}
             {t.name}
           </Link>
         </h3>
@@ -116,7 +118,7 @@ function GroupHeader({ g, showStatus }: { g: Group; showStatus: boolean }) {
       <div className={cn("flex h-11 items-center border-b border-border px-1 lg:px-3", COLS, "lg:items-center")}>
         <h2 className="flex min-w-0 items-baseline gap-2 lg:col-span-2" id={`g-${g.key}`}>
           <span className="flex items-center gap-2 text-ui font-semibold tracking-h3 text-fg">
-            {g.live && <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />}
+            {g.live && <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-live" aria-hidden />}
             {g.title}
           </span>
           <span className="text-small tabular-nums text-muted">{g.items.length}</span>
@@ -179,7 +181,7 @@ export default function CrTournamentsPage() {
 
   return (
     <div className={shell}>
-      <PageHead eyebrow="India · FIDE federation IND" title="Tournaments">
+      <PageHead eyebrow="India · federation IND" title="Tournaments">
         Every Indian event we mirror from chess-results.com: in play, about to start, and finished with full results.
       </PageHead>
 
@@ -199,7 +201,9 @@ export default function CrTournamentsPage() {
         </div>
         <SearchField id="cr-search" value={text} onChange={setText} className="w-full lg:w-[340px]" placeholder="Search by name or city" shortcut={false} />
       </div>
-      <SourceNote refreshedAt={latest} className="mt-4" />
+      <SourceNote refreshedAt={list.isPending ? undefined : latest} className="mt-4">
+        <span className="text-subtle">· ongoing events refresh every 30 minutes, upcoming daily</span>
+      </SourceNote>
 
       <div className="mt-4">
         {list.isPending ? (
@@ -207,13 +211,14 @@ export default function CrTournamentsPage() {
         ) : list.isError ? (
           <ErrorState message={(list.error as Error).message} onRetry={() => list.refetch()} />
         ) : rows.length === 0 ? (
-          <div className="px-4 py-16 text-center">
-            <h2 className="text-h3 font-semibold tracking-h3">{urlQ ? `Nothing matches “${urlQ}”` : tab === "live" ? "Nothing in play right now" : "No tournaments here yet"}</h2>
-            <p className="mx-auto mt-1.5 max-w-sm text-body text-muted">
-              {urlQ ? "Try another name or city, or look in another tab." : tab === "live" ? "Check what's coming up next." : "The mirror adds events as chess-results.com publishes them."}
-            </p>
-            {tab === "live" && !urlQ && <button type="button" onClick={() => setTab("upcoming")} className="mt-5 h-9 rounded-sm border border-border-strong bg-surface px-4 text-ui font-medium shadow-e1 hover:bg-surface-2">See upcoming</button>}
-          </div>
+          <EmptyNote
+            className="mt-6"
+            piece={tab === "live" ? "wK" : undefined}
+            title={urlQ ? `Nothing matches “${urlQ}”` : tab === "live" ? "Nothing in play right now" : "No tournaments here yet"}
+            action={tab === "live" && !urlQ ? <Button variant="secondary" onClick={() => setTab("upcoming")}>See upcoming</Button> : undefined}
+          >
+            {urlQ ? "Try another name or city, or look in another tab." : tab === "live" ? "Check what's coming up next." : "The mirror adds events as chess-results.com publishes them."}
+          </EmptyNote>
         ) : (
           <div className={cn("transition-opacity", list.isPlaceholderData && "opacity-60")}>
             {groups.map((g) => (
@@ -239,9 +244,9 @@ export default function CrTournamentsPage() {
             ))}
             <div className="flex justify-center py-6">
               {list.hasNextPage ? (
-                <button type="button" disabled={list.isFetchingNextPage} onClick={() => list.fetchNextPage()} className="h-9 rounded-sm border border-border-strong bg-surface px-4 text-ui font-medium text-fg shadow-e1 hover:bg-surface-2 disabled:opacity-60">
+                <Button variant="secondary" disabled={list.isFetchingNextPage} onClick={() => list.fetchNextPage()}>
                   {list.isFetchingNextPage ? "Loading…" : `Show more (${total - rows.length} left)`}
-                </button>
+                </Button>
               ) : (
                 rows.length > 8 && <p className="flex items-center gap-3 text-small text-subtle"><span className="h-px w-8 bg-border" />{total} tournaments<span className="h-px w-8 bg-border" /></p>
               )}

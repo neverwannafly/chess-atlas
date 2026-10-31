@@ -134,3 +134,11 @@ export async function submitDeletionRequest(body: DeletionRequestInput): Promise
   const j = await res.json();
   return { id: j.data.id };
 }
+
+// ---------------------------------------------------------------- freshness
+export interface Health { status: string; events: number; lastScrapeAt: string | null; version: string }
+
+export async function fetchHealth(): Promise<Health> {
+  if (MOCK) return { status: "ok", events: 0, lastScrapeAt: new Date().toISOString(), version: "mock" };
+  return (await get<{ data: Health }>("/api/health")).data;
+}

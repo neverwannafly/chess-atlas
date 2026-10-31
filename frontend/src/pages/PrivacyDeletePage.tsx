@@ -38,7 +38,7 @@ function Field({ id, label, optional, hint, error, children }: { id: string; lab
       </label>
       {children}
       {hint && <p id={`${id}-hint`} className="mt-1.5 text-small text-muted">{hint}</p>}
-      {error && <p id={`${id}-err`} className="mt-1.5 text-small text-danger" style={{ color: "var(--danger, #b42318)" }}>{error}</p>}
+      {error && <p id={`${id}-err`} className="mt-1.5 text-small text-danger">{error}</p>}
     </div>
   );
 }
@@ -113,7 +113,7 @@ export default function PrivacyDeletePage() {
         <p className={cn("text-small", idErr ? "text-fg" : "text-muted")} id="identity-rule">
           Give a FIDE id, <strong className="font-semibold">or</strong> both the tournament number and the start number.
         </p>
-        {idErr && <p className="-mt-3 text-small" style={{ color: "var(--danger, #b42318)" }} role="alert">{idErr}</p>}
+        {idErr && <p className="-mt-3 text-small text-danger" role="alert">{idErr}</p>}
 
         <Field id="dr-name" label="Your name" error={errors.name}>
           <input {...props("name", "dr-name")} className={input} value={v.name} onChange={(e) => set("name", e.target.value)} autoComplete="name" maxLength={100} />
@@ -141,7 +141,7 @@ export default function PrivacyDeletePage() {
             <input {...props("confirm", "dr-confirm")} type="checkbox" checked={v.confirm} onChange={(e) => set("confirm", e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]" />
             <label htmlFor="dr-confirm" className="text-ui text-fg">I am the player, or their parent or guardian, and I ask for this data to be deleted.</label>
           </div>
-          {errors.confirm && <p id="dr-confirm-err" className="mt-1.5 text-small" style={{ color: "var(--danger, #b42318)" }}>{errors.confirm}</p>}
+          {errors.confirm && <p id="dr-confirm-err" className="mt-1.5 text-small text-danger">{errors.confirm}</p>}
         </div>
 
         {formError && <p role="alert" className="rounded-sm border border-border-strong bg-surface-2 px-3 py-2 text-ui text-fg">{formError}</p>}

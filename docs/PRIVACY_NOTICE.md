@@ -14,7 +14,9 @@ This notice explains what personal data we hold, why, where it comes from, and w
 - **FIDE title and FIDE rating history**, from FIDE's published monthly rating list.
 - **Tournament results**: standings, rounds, pairings and game results.
 
-We do **not** hold dates of birth or years of birth.
+We hold a **year of birth** for some players, from FIDE's published list or the player's chess-results card.
+We do **not** hold full dates of birth, because neither source publishes them. We use the year only to show an
+age category (for example U14). The year itself is not shown on this site.
 
 ## Where it comes from
 

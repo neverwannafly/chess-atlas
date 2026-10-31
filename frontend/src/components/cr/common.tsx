@@ -1,24 +1,25 @@
-import { ArrowUpRight, RefreshCw } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { CrStatus } from "@/types/chessresults";
 import { Badge } from "@/components/Badge";
-import { absoluteTime, CR_SOURCE, relativeTime } from "@/lib/chessresults";
-import { useNow } from "@/hooks/crQueries";
+import { SourceLine } from "@/components/Trust";
+import { CR_SOURCE } from "@/lib/chessresults";
 import { cn } from "@/lib/utils";
 
+/** Ongoing, upcoming and finished each have their own status colour (docs/DESIGN_SYSTEM.md). */
 export function StatusPill({ status, className }: { status: CrStatus; className?: string }) {
   if (status === "ongoing")
     return (
-      <Badge tone="accent" className={className}>
-        <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />Live
+      <Badge tone="live" className={className}>
+        <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-live" aria-hidden />Live
       </Badge>
     );
   if (status === "upcoming")
     return (
-      <Badge tone="outline" className={cn("border-border", className)}>
-        <span className="h-1.5 w-1.5 rounded-full bg-fg/70" aria-hidden />Upcoming
+      <Badge tone="upcoming" className={className}>
+        <span className="h-1.5 w-1.5 rounded-full border-[1.5px] border-upcoming" aria-hidden />Upcoming
       </Badge>
     );
-  return <Badge tone="neutral" className={className}>Finished</Badge>;
+  return <Badge tone="finished" className={className}>Finished</Badge>;
 }
 
 export function TitleBadge({ title }: { title: string | null | undefined }) {
@@ -41,27 +42,11 @@ export function ExternalLink({ href, children, className }: { href: string; chil
 }
 
 /** "Data: chess-results.com · refreshed 4 minutes ago". Always shown next to mirrored data. */
-export function SourceNote({ refreshedAt, className, live, href = CR_SOURCE.url, children }: { refreshedAt: string | null | undefined; className?: string; live?: boolean; href?: string; children?: React.ReactNode }) {
-  const now = useNow();
-  const rel = relativeTime(refreshedAt, now);
+export function SourceNote({ refreshedAt, className, live, failed, href = CR_SOURCE.url, children }: { refreshedAt: string | null | undefined; className?: string; live?: boolean; failed?: boolean; href?: string; children?: React.ReactNode }) {
   return (
-    <p className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-small text-muted", className)}>
-      <span>
-        Data:{" "}
-        <a href={href} target="_blank" rel="noopener noreferrer" className="text-fg underline decoration-border-strong underline-offset-[3px] hover:decoration-fg">chess-results.com</a>
-      </span>
-      {refreshedAt !== undefined && (
-        <>
-          <span className="text-subtle" aria-hidden>·</span>
-          <span className="inline-flex items-center gap-1" title={refreshedAt ? absoluteTime(refreshedAt) : undefined}>
-            {live && <RefreshCw className="h-3 w-3 text-subtle" aria-hidden />}
-            {rel ? <>refreshed <time dateTime={refreshedAt!}>{rel}</time></> : "not refreshed yet"}
-          </span>
-        </>
-      )}
-      {live && <span className="text-subtle">· updates every minute</span>}
+    <SourceLine sources={[{ name: CR_SOURCE.name, href }]} refreshedAt={refreshedAt} live={live} failed={failed} className={className}>
       {children}
-    </p>
+    </SourceLine>
   );
 }
 
@@ -70,7 +55,7 @@ export function PageHead({ eyebrow, title, children, aside }: { eyebrow?: React.
     <header className="flex flex-col gap-4 pt-8 sm:flex-row sm:items-end sm:justify-between sm:pt-12">
       <div className="min-w-0">
         {eyebrow && <p className="mb-2 flex items-center gap-2 text-label font-medium uppercase tracking-[0.08em] text-muted">{eyebrow}</p>}
-        <h1 className="text-[28px] font-semibold leading-[1.15] tracking-h1 sm:text-[34px]">{title}</h1>
+        <h1 className="text-title font-semibold tracking-h1 sm:text-[36px] sm:leading-[1.12]">{title}</h1>
         {children && <div className="mt-2 max-w-[62ch] text-body text-muted">{children}</div>}
       </div>
       {aside}

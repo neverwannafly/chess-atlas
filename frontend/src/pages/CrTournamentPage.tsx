@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, CalendarDays, Clock, Hash, MapPin } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUpRight } from "lucide-react";
 import type { CrGame, CrStanding, CrTournamentDetail } from "@/types/chessresults";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/States";
+import { EmptyNote } from "@/components/Trust";
 import { ExternalLink, SourceNote, StatusPill } from "@/components/cr/common";
 import NotFoundPage from "@/pages/NotFoundPage";
 import { useCrRound, useCrTournament, useListedRounds, useNow } from "@/hooks/crQueries";
@@ -28,14 +29,27 @@ function SectionTitle({ id, title, meta }: { id: string; title: string; meta?: R
 
 // ───────────────────────────── header ─────────────────────────────
 
+/** Phone order for the facts strip: place first and full width, then dates, rounds, time control, players. */
+const MOBILE_ORDER = ["max-sm:order-1", "max-sm:order-first max-sm:col-span-2", "max-sm:order-3", "max-sm:order-2", "max-sm:order-4"];
+
 function Header({ t }: { t: CrTournamentDetail }) {
   const reduce = useReducedMotion();
   const now = useNow();
   const listed = useListedRounds(t.id);
-  const p = roundProgress(t.roundList, listed ?? (t.status === "finished" && t.roundList.length ? t.roundList.length : null));
+  const rp = roundProgress(t.roundList, listed ?? (t.status === "finished" && t.roundList.length ? t.roundList.length : null));
+  // The detail payload carries the scheduled count and the highest paired round when known; prefer them.
+  const p = { current: t.currentRound ?? rp.current, of: t.rounds ?? rp.of };
   const dates = crDateRange(t.startDate, t.endDate);
   const fade = (i: number) => (reduce ? {} : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.45, ease: EASE, delay: 0.05 * i } });
   const updated = relativeTime(t.lastUpdatedAt, now);
+  const next = t.status !== "finished" ? relativeTime(t.nextRefreshAt, now) : null;
+  const facts: [string, React.ReactNode, boolean?][] = [
+    ["Dates", dates ?? <span className="text-subtle">Not listed</span>],
+    ["Where", t.location ?? <span className="text-subtle">Not listed</span>],
+    ["Time control", t.timeControl ?? <span className="text-subtle">—</span>, true],
+    [t.status === "ongoing" ? "Round" : "Rounds", p.of ? (t.status === "ongoing" && p.current ? `${p.current} of ${p.of}` : p.of) : t.status === "ongoing" && p.current ? `${p.current}` : <span className="text-subtle">—</span>],
+    ["Players", t.standings.length || <span className="text-subtle">—</span>],
+  ];
   return (
     <header className="pt-5 sm:pt-6">
       <nav aria-label="Breadcrumb" className="text-small text-muted">
@@ -47,37 +61,40 @@ function Header({ t }: { t: CrTournamentDetail }) {
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />Tournaments
         </Link>
       </nav>
-      <motion.div {...fade(0)} className="mt-5 flex flex-wrap items-center gap-1.5">
+      <motion.div {...fade(0)} className="mt-5 flex flex-wrap items-center gap-2">
         <StatusPill status={t.status} />
-        {t.status === "ongoing" && p.current && <span className="text-small font-medium tabular-nums text-accent">Round {p.current}{p.of ? ` of ${p.of}` : ""}</span>}
-        <span className="text-small text-subtle">{t.federation}</span>
+        <span className="text-small text-subtle">Federation {t.federation}</span>
       </motion.div>
-      <h1 className="mt-3 max-w-[30ch] text-[28px] font-semibold leading-[1.12] tracking-h1 sm:text-[36px]">{t.name}</h1>
-      <motion.dl {...fade(1)} className="mt-4 grid gap-2 text-ui sm:flex sm:flex-wrap sm:gap-x-6">
-        <div className="flex items-center gap-2"><dt className="sr-only">Dates</dt><CalendarDays className="h-4 w-4 shrink-0 text-subtle" aria-hidden /><dd>{dates ?? "Dates not listed"}</dd></div>
-        <div className="flex min-w-0 items-center gap-2"><dt className="sr-only">Where</dt><MapPin className="h-4 w-4 shrink-0 text-subtle" aria-hidden /><dd className="truncate">{t.location ?? "Location not listed"}</dd></div>
-        <div className="flex items-center gap-2"><dt className="sr-only">Time control</dt><Clock className="h-4 w-4 shrink-0 text-subtle" aria-hidden /><dd className="font-mono text-[13px]">{t.timeControl ?? "—"}</dd></div>
-        {p.of && <div className="flex items-center gap-2"><dt className="sr-only">Rounds</dt><Hash className="h-4 w-4 shrink-0 text-subtle" aria-hidden /><dd>{p.of} rounds</dd></div>}
+      <h1 className="mt-3 max-w-[30ch] text-title font-semibold tracking-h1 sm:text-[36px] sm:leading-[1.12]">{t.name}</h1>
+      <motion.dl {...fade(1)} className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-[1.1fr_1.6fr_1.3fr_0.8fr_0.8fr]">
+        {facts.map(([k, v, mono], i) => (
+          <div key={k} className={cn("min-w-0 bg-surface px-4 py-3", MOBILE_ORDER[i])}>
+            <dt className="text-label font-medium uppercase tracking-[0.08em] text-muted">{k}</dt>
+            <dd className={cn("mt-1 text-ui text-fg sm:truncate", mono && "font-mono text-[13px]", k === "Round" && "text-live")} title={typeof v === "string" ? v : undefined}>{v}</dd>
+          </div>
+        ))}
       </motion.dl>
-      <motion.div {...fade(2)} className="mt-6 flex flex-wrap gap-2">
+      <motion.div {...fade(2)} className="mt-5 flex flex-wrap gap-2">
         {t.liveUrl && (
-          <Button asChild size="lg" className="max-sm:flex-1">
+          <Button asChild size="lg" className="max-sm:w-full">
             <a href={t.liveUrl} target="_blank" rel="noopener noreferrer">
-              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent-fg" aria-hidden />Live on chess-results<ArrowUpRight aria-hidden /><span className="sr-only">(opens in a new tab)</span>
+              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent-fg" aria-hidden />Live boards on chess-results<ArrowUpRight aria-hidden /><span className="sr-only">(opens in a new tab)</span>
             </a>
           </Button>
         )}
-        <Button asChild size="lg" variant="secondary" className="max-sm:flex-1">
+        <Button asChild size="lg" variant="secondary" className="max-sm:w-full">
           <a href={t.chessResultsUrl} target="_blank" rel="noopener noreferrer">
-            Official page<ArrowUpRight aria-hidden /><span className="sr-only">on chess-results.com (opens in a new tab)</span>
+            Official page on chess-results<ArrowUpRight aria-hidden /><span className="sr-only">(opens in a new tab)</span>
           </a>
         </Button>
       </motion.div>
       <div className="mt-5 space-y-1 border-t border-border pt-4">
-        <SourceNote refreshedAt={t.lastRefreshedAt} live={t.status === "ongoing"} href={t.chessResultsUrl} />
-        {updated && <p className="text-small text-subtle" title={absoluteTime(t.lastUpdatedAt!)}>Organiser last changed the page {updated}.</p>}
+        <SourceNote refreshedAt={t.lastRefreshedAt} live={t.status === "ongoing"} failed={!!t.error} href={t.chessResultsUrl}>
+          {next && <span className="text-subtle">· next refresh {next}</span>}
+        </SourceNote>
+        {updated && <p className="text-small text-subtle" title={absoluteTime(t.lastUpdatedAt!)}>Organiser last changed the page on chess-results {updated}.</p>}
         {t.error && (
-          <p className="flex items-center gap-1.5 text-small text-warn"><AlertTriangle className="h-3.5 w-3.5" aria-hidden />The last refresh failed; figures may be behind. Check the official page.</p>
+          <p className="flex items-center gap-1.5 text-small text-warn"><AlertTriangle className="h-3.5 w-3.5" aria-hidden />Figures may be behind. Check the official page.</p>
         )}
       </div>
     </header>
@@ -95,7 +112,7 @@ function Standings({ rows }: { rows: CrStanding[] }) {
   const leader = started ? rows.find((r) => r.rank === 1) : null;
 
   if (!rows.length)
-    return <p className="rounded-md border border-dashed border-border-strong px-4 py-10 text-center text-body text-muted">No players listed yet. The starting list appears here once the organiser publishes it.</p>;
+    return <EmptyNote title="No players listed yet">The starting list appears here once the organiser publishes it on chess-results.</EmptyNote>;
 
   return (
     <>
@@ -104,7 +121,11 @@ function Standings({ rows }: { rows: CrStanding[] }) {
           <img src="/pieces/cburnett/wK.svg" alt="" className="h-8 w-8 shrink-0" />
           <p className="min-w-0 text-ui">
             <span className="text-muted">Leading: </span>
-            <Link to={`/players/${leader.playerId}`} className="font-medium text-fg hover:underline hover:underline-offset-4">{playerName(leader.name)}</Link>
+            {leader.playerId != null ? (
+              <Link to={`/players/${leader.playerId}`} className="font-medium text-fg hover:underline hover:underline-offset-4">{playerName(leader.name)}</Link>
+            ) : (
+              <span className="font-medium text-fg">{playerName(leader.name)}</span>
+            )}
             <span className="ml-2 font-mono text-muted">{formatPoints(leader.points)} pts</span>
           </p>
         </div>
@@ -131,7 +152,11 @@ function Standings({ rows }: { rows: CrStanding[] }) {
                 <tr key={r.snr} className="transition-colors hover:bg-surface-2/60">
                   <td className={cn("py-2.5 pl-4 pr-2 text-right font-mono text-[13px] tabular-nums", r.rank && r.rank <= 3 ? "font-semibold text-accent" : "text-muted")}>{started ? r.rank ?? "—" : r.snr}</td>
                   <td className="max-w-0 px-2 py-2.5">
-                    <Link to={`/players/${r.playerId}`} className="block truncate font-medium text-fg hover:underline hover:decoration-border-strong hover:underline-offset-4">{playerName(r.name)}</Link>
+                    {r.playerId != null ? (
+                      <Link to={`/players/${r.playerId}`} className="block truncate font-medium text-fg hover:underline hover:decoration-border-strong hover:underline-offset-4">{playerName(r.name)}</Link>
+                    ) : (
+                      <span className="block truncate font-medium text-muted">{playerName(r.name)}</span>
+                    )}
                     <span className="block truncate text-small text-muted sm:hidden">{[r.rating ?? "Unrated", r.fed].join(" · ")}</span>
                     {r.club && <span className="hidden truncate text-small text-subtle sm:block">{r.club}</span>}
                   </td>
@@ -161,8 +186,9 @@ function Standings({ rows }: { rows: CrStanding[] }) {
 
 const RESULT_TONE: Record<string, string> = { "1-0": "text-fg", "0-1": "text-fg", "½-½": "text-muted" };
 
-function Side({ name, rating, snr, toId, align }: { name: string | null; rating: number | null; snr: number | null; toId: (snr: number | null) => number | undefined; align: "left" | "right" }) {
-  const id = toId(snr);
+function Side({ name, rating, snr, playerId, toId, align }: { name: string | null; rating: number | null; snr: number | null; playerId?: number | null; toId: (snr: number | null) => number | undefined; align: "left" | "right" }) {
+  // The round payload carries the player id; older payloads fall back to the standings' start numbers.
+  const id = playerId !== undefined ? playerId ?? undefined : toId(snr);
   const label = name ? playerName(name) : "Bye";
   return (
     <div className={cn("min-w-0", align === "right" && "text-right")}>
@@ -182,13 +208,13 @@ function GameRow({ g, toId }: { g: CrGame; toId: (snr: number | null) => number 
       <span className="font-mono text-[12px] tabular-nums text-subtle">{g.board}</span>
       <div className="flex min-w-0 items-center gap-2">
         <span className="h-2.5 w-2.5 shrink-0 rounded-[2px] border border-border-strong bg-[var(--board-light)]" aria-label="White" />
-        <Side name={g.whiteName} rating={g.whiteRating} snr={g.whiteSnr} toId={toId} align="left" />
+        <Side name={g.whiteName} rating={g.whiteRating} snr={g.whiteSnr} playerId={g.whitePlayerId} toId={toId} align="left" />
       </div>
       <span className={cn("text-center font-mono text-[13px] font-semibold tabular-nums", g.result ? RESULT_TONE[g.result] ?? "text-muted" : "text-subtle")}>
         {g.result ?? <span className="font-sans text-small font-normal">playing</span>}
       </span>
       <div className="flex min-w-0 items-center justify-end gap-2">
-        <Side name={g.blackName} rating={g.blackRating} snr={g.blackSnr} toId={toId} align="right" />
+        <Side name={g.blackName} rating={g.blackRating} snr={g.blackSnr} playerId={g.blackPlayerId} toId={toId} align="right" />
         <span className="h-2.5 w-2.5 shrink-0 rounded-[2px] bg-[var(--board-dark)]" aria-label="Black" />
       </div>
     </li>
@@ -198,11 +224,11 @@ function GameRow({ g, toId }: { g: CrGame; toId: (snr: number | null) => number 
 function Rounds({ t }: { t: CrTournamentDetail }) {
   const live = t.status === "ongoing";
   const p = roundProgress(t.roundList, null);
-  const [round, setRound] = useState<number | null>(p.current);
+  const [round, setRound] = useState<number | null>(t.currentRound ?? p.current);
   const { data: games, isPending, isError, refetch, isPlaceholderData } = useCrRound(t.id, round, live);
   const stripRef = useRef<HTMLDivElement>(null);
   const bySnr = useMemo(() => new Map(t.standings.map((s) => [s.snr, s.playerId])), [t.standings]);
-  const toId = (snr: number | null) => (snr == null ? undefined : bySnr.get(snr));
+  const toId = (snr: number | null) => (snr == null ? undefined : bySnr.get(snr) ?? undefined);
   const matches = useMemo(() => {
     const m = new Map<number, CrGame[]>();
     for (const g of games ?? []) m.set(g.match, [...(m.get(g.match) ?? []), g]);
@@ -212,7 +238,7 @@ function Rounds({ t }: { t: CrTournamentDetail }) {
   const info = t.roundList.find((r) => r.round === round);
 
   if (!t.roundList.length)
-    return <p className="rounded-md border border-dashed border-border-strong px-4 py-10 text-center text-body text-muted">No pairings published yet.</p>;
+    return <EmptyNote title="No pairings published yet">Round 1 pairings appear here once the arbiter publishes them.</EmptyNote>;
 
   return (
     <>
@@ -232,7 +258,7 @@ function Rounds({ t }: { t: CrTournamentDetail }) {
               >
                 {on && <motion.span layoutId="round-thumb" className="absolute inset-0 rounded-[5px] border border-border bg-surface shadow-e1" transition={{ type: "spring", stiffness: 500, damping: 40 }} aria-hidden />}
                 <span className="relative">{r.round}</span>
-                {playing && <span className="pulse-dot relative h-1.5 w-1.5 rounded-full bg-accent" aria-label="in progress" />}
+                {playing && <span className="pulse-dot relative h-1.5 w-1.5 rounded-full bg-live" aria-label="in progress" />}
               </button>
             );
           })}
@@ -246,9 +272,9 @@ function Rounds({ t }: { t: CrTournamentDetail }) {
         {isPending ? (
           <div className="space-y-2" role="status" aria-label="Loading pairings">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : isError ? (
-          <ErrorState message="Couldn't load this round." onRetry={() => refetch()} />
+          <ErrorState title="Couldn't load this round" message="The pairings didn't load. Try again, or open the round on chess-results." onRetry={() => refetch()} />
         ) : !games?.length ? (
-          <p className="rounded-md border border-dashed border-border-strong px-4 py-8 text-center text-body text-muted">No pairings for this round yet.</p>
+          <EmptyNote>No pairings for this round yet.</EmptyNote>
         ) : (
           <div className="space-y-4">
             {matches.map(([n, gs]) => (
@@ -285,7 +311,7 @@ export default function CrTournamentPage() {
   if (isPending) return <PageSkeleton />;
   if (isError) {
     if (error instanceof ApiError && error.status === 404) return <NotFoundPage what="tournament" />;
-    return <div className={shell}><ErrorState message={(error as Error).message} onRetry={() => refetch()} /></div>;
+    return <div className={shell}><ErrorState title="Couldn't load this tournament" message={(error as Error).message} onRetry={() => refetch()} /></div>;
   }
   const started = t.standings.some((s) => s.points != null);
   return (
