@@ -13,7 +13,11 @@ export const SearchField = forwardRef<HTMLInputElement, {
   className?: string;
   placeholder?: string;
   onEnter?: () => void;
-}>(function SearchField({ value, onChange, size = "sm", id, className, placeholder = "Search tournaments, cities, venues", onEnter }, ref) {
+  /** Accessible label; defaults to the tournament search. */
+  label?: string;
+  /** Show the ⌘K hint (only where the global shortcut focuses this field). */
+  shortcut?: boolean;
+}>(function SearchField({ value, onChange, size = "sm", id, className, placeholder = "Search tournaments, cities, venues", onEnter, label = "Search tournaments", shortcut = true }, ref) {
   const lg = size === "lg";
   return (
     <form
@@ -21,7 +25,7 @@ export const SearchField = forwardRef<HTMLInputElement, {
       onSubmit={(e) => { e.preventDefault(); onEnter?.(); }}
       className={cn("group relative min-w-0", className)}
     >
-      <label htmlFor={id} className="sr-only">Search tournaments</label>
+      <label htmlFor={id} className="sr-only">{label}</label>
       <Search className={cn("pointer-events-none absolute top-1/2 -translate-y-1/2 text-subtle transition-colors group-focus-within:text-accent", lg ? "left-4 h-[18px] w-[18px]" : "left-3 h-4 w-4")} aria-hidden />
       <input
         ref={ref}
@@ -48,7 +52,7 @@ export const SearchField = forwardRef<HTMLInputElement, {
         >
           <X className="h-4 w-4" aria-hidden />
         </button>
-      ) : (
+      ) : shortcut && (
         <kbd
           className={cn(
             "pointer-events-none absolute top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-[5px] border border-border bg-surface-2 font-mono text-muted sm:flex",

@@ -54,7 +54,7 @@ export function toSearchParams(q: EventQuery): URLSearchParams {
 
 const MOCK = import.meta.env.VITE_MOCK === "1";
 
-async function get<T>(path: string, params?: URLSearchParams): Promise<T> {
+export async function get<T>(path: string, params?: URLSearchParams): Promise<T> {
   const url = params && params.size ? `${path}?${params}` : path;
   let res: Response;
   try {
@@ -99,4 +99,38 @@ import type { Insights } from "@/types/event";
 
 export async function fetchInsights(): Promise<Insights> {
   return (await get<{ data: Insights }>("/api/meta/insights")).data;
+}
+
+// ---------------------------------------------------------------- privacy
+export interface DeletionRequestInput {
+  name: string;
+  fideId?: string;
+  chessResultsTournamentId?: string;
+  chessResultsStartNo?: number;
+  contactEmail: string;
+  note?: string;
+  confirm: true;
+}
+
+export async function submitDeletionRequest(body: DeletionRequestInput): Promise<{ id: string | number }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/privacy/deletion-requests", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, "Can't reach the server. Check your connection.");
+  }
+  if (!res.ok) {
+    let msg = "";
+    try {
+      const j = await res.json();
+      msg = typeof j.error === "string" ? j.error : j.error?.message ?? j.message ?? "";
+    } catch { /* not json */ }
+    throw new ApiError(res.status, msg);
+  }
+  const j = await res.json();
+  return { id: j.data.id };
 }

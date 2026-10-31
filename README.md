@@ -59,6 +59,29 @@ Results are cached by PDF hash in `backend/data/extraction-cache/`, so re-runnin
 different backend (e.g. production) does not re-invoke the model. See
 [`backend/src/extraction/README.md`](backend/src/extraction/README.md).
 
+## Chess-results mirror
+
+A separate worker (`backend/src/chessresults/`) keeps a mirror of tournaments on
+[chess-results.com](https://chess-results.com/): standings, round-by-round pairings and results.
+The operator has agreed to this use. Every page shown from it links back to the source.
+
+```bash
+cd backend
+CHESSRESULTS_USER_AGENT="ChessAtlasBot/1.0 (contact: <ops email>)" npm run chessresults
+```
+
+- Runs every 30 minutes in its own process (it shares the SQLite file with the API).
+- Each cycle reads the home page once, then refreshes only tournaments whose "N minutes ago" shows an
+  update since our last fetch. Pages are fetched one at a time, at least 3 seconds apart.
+- Each cycle has a request budget (`CR_REQUESTS_PER_CYCLE`, default 300). The first run backfills
+  everything over several cycles.
+- Only names, ratings and clubs are stored. FIDE IDs and dates of birth are never stored.
+- API: `GET /api/chessresults/tournaments`, `/tournaments/:id`, `/tournaments/:id/rounds/:round`, `/status`.
+- Discovery is limited to the home page (current and recent events). Older tournaments are not discovered yet.
+
+Environment: `CR_MIN_INTERVAL_MS` (default 3000), `CR_REQUESTS_PER_CYCLE` (default 300).
+The worker needs to run as a second process in production; the current Dockerfile starts only the API.
+
 ## Environment
 
 | Variable | Default | Purpose |

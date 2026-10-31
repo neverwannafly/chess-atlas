@@ -9,6 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const EventPage = lazy(() => import("@/pages/EventPage"));
 const StatsPage = lazy(() => import("@/pages/StatsPage"));
+const LivePage = lazy(() => import("@/pages/LivePage"));
+const CrTournamentsPage = lazy(() => import("@/pages/CrTournamentsPage"));
+const CrTournamentPage = lazy(() => import("@/pages/CrTournamentPage"));
+const PlayersPage = lazy(() => import("@/pages/PlayersPage"));
+const PlayerPage = lazy(() => import("@/pages/PlayerPage"));
+const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
+const PrivacyDeletePage = lazy(() => import("@/pages/PrivacyDeletePage"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -30,6 +37,13 @@ const router = createBrowserRouter([
       { index: true, element: <DiscoverPage /> },
       { path: "events/:eventCode", element: lazyEl(<EventPage />) },
       { path: "insights", element: lazyEl(<StatsPage />) },
+      { path: "live", element: lazyEl(<LivePage />) },
+      { path: "tournaments", element: lazyEl(<CrTournamentsPage />) },
+      { path: "tournaments/:id", element: lazyEl(<CrTournamentPage />) },
+      { path: "players", element: lazyEl(<PlayersPage />) },
+      { path: "players/:id", element: lazyEl(<PlayerPage />) },
+      { path: "privacy", element: lazyEl(<PrivacyPage />) },
+      { path: "privacy/delete", element: lazyEl(<PrivacyDeletePage />) },
       { path: "stats", element: <Navigate to="/insights" replace /> },
       { path: "*", element: <NotFoundPage /> },
     ],
