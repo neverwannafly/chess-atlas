@@ -425,6 +425,13 @@ export const migrations: Migration[] = [
       db.exec(`UPDATE tournaments SET backfilled = 0 WHERE id NOT IN (SELECT DISTINCT tournamentId FROM games);`);
     },
   },
+  {
+    version: 13,
+    name: "FIDE profile statistics: when each player's monthly history was last imported",
+    up(db) {
+      db.exec(`ALTER TABLE players ADD COLUMN fideStatsFetchedAtMs INTEGER;`);
+    },
+  },
 ];
 
 export function runMigrations(db: Db): void {

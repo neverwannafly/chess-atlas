@@ -6,6 +6,8 @@ import * as store from "../db/chessresults.js";
 import { getPlayerDetail, searchPlayers } from "../db/players.js";
 import { requestPlayerRefresh } from "../chessresults/lazy.js";
 import { settleLiveRefresh, startLiveRefresh } from "../chessresults/live.js";
+import { requestFideProfile } from "../fide/profile.js";
+import { recordOf } from "../lib/record.js";
 
 const router = Router();
 
@@ -123,11 +125,12 @@ router.get(
     if (!detail) throw new ApiError(404, "NOT_FOUND", "Player not found");
     // Results are refreshed on request, in the background. This response shows what is stored now.
     const refresh = requestPlayerRefresh(id.data as number);
+    const fide = requestFideProfile(id.data as number, (detail as { fideId?: string | null }).fideId ?? null);
     const results = store.playerResults(id.data as number);
     const last = results.reduce((m, r) => Math.max(m, r.fetchedAtMs ?? 0), 0);
     res.set("Cache-Control", "no-cache");
     res.json({
-      data: { ...detail, results },
+      data: { ...detail, results, record: recordOf(results) },
       // `state` is "queued" when this request started a background refresh. A `state` set by the refresh
       // module itself (e.g. "in_progress") takes precedence.
       meta: { source: SOURCE, refresh: { state: refresh.queued ? "queued" : "idle", ...refresh, lastRefreshedAt: iso(last) } },
