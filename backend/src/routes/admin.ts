@@ -12,6 +12,7 @@ import { completeDeletion, listDeletionRequests, setDeletionStatus } from "../db
 import db, { DATA_DIR } from "../db/database.js";
 import { getMeta, setMeta } from "../db/events.js";
 import { ingestMonthlyList, looksLikeZip } from "../fide/ingest.js";
+import { replaceFromFile } from "../db/replace.js";
 
 const router = Router();
 
@@ -216,6 +217,96 @@ router.post(
         fs.rmSync(zipPath, { force: true });
       }
     })();
+  }),
+);
+
+// ---- replace all data (admin) -------------------------------------------------------------------
+// POST a local SQLite database as the raw body to /api/admin/replace-db?confirm=replace-everything.
+// It replaces every table except the erasure records (see src/db/replace.ts). A backup of the live
+// database is written first. The job runs in the background; GET the same path for its status.
+// The status lives in a file, not in meta, because the upload replaces meta.
+
+const REPLACE_MAX_BYTES = 400 * 1024 * 1024;
+const REPLACE_DIR = path.join(DATA_DIR, "replace");
+const REPLACE_STATUS_FILE = path.join(REPLACE_DIR, "status.json");
+const SQLITE_HEADER = "SQLite format 3\0";
+
+interface ReplaceStatus {
+  state: "idle" | "running" | "done" | "error";
+  startedAt: string | null;
+  finishedAt: string | null;
+  backupPath: string | null;
+  message: string | null;
+  stats: unknown;
+}
+
+function readReplaceStatus(): ReplaceStatus {
+  const idle: ReplaceStatus = { state: "idle", startedAt: null, finishedAt: null, backupPath: null, message: null, stats: null };
+  try {
+    return JSON.parse(fs.readFileSync(REPLACE_STATUS_FILE, "utf8")) as ReplaceStatus;
+  } catch {
+    return idle;
+  }
+}
+
+function writeReplaceStatus(s: ReplaceStatus): void {
+  fs.mkdirSync(REPLACE_DIR, { recursive: true });
+  fs.writeFileSync(REPLACE_STATUS_FILE, JSON.stringify(s, null, 2));
+}
+
+function freeBytes(dir: string): number {
+  const s = fs.statfsSync(dir);
+  return Number(s.bavail) * Number(s.bsize);
+}
+
+router.get(
+  "/replace-db",
+  wrap((_req, res) => {
+    const dbFile = path.join(DATA_DIR, "chessatlas.db");
+    res.json({ data: { ...readReplaceStatus(), dbBytes: fs.statSync(dbFile).size, freeBytes: freeBytes(DATA_DIR) } });
+  }),
+);
+
+router.post(
+  "/replace-db",
+  raw({ type: () => true, limit: REPLACE_MAX_BYTES }),
+  wrap((req, res) => {
+    if (req.query.confirm !== "replace-everything") {
+      throw new ApiError(400, "BAD_REQUEST", "This replaces all data. Add ?confirm=replace-everything to continue.");
+    }
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length < 1024 || body.subarray(0, 16).toString("latin1") !== SQLITE_HEADER) {
+      throw new ApiError(400, "BAD_REQUEST", "Send a SQLite database file as the raw request body");
+    }
+    if (readReplaceStatus().state === "running") throw new ApiError(409, "CONFLICT", "A replacement is already running");
+
+    const dbFile = path.join(DATA_DIR, "chessatlas.db");
+    const dbBytes = fs.statSync(dbFile).size;
+    // Room for the backup, the uploaded copy and the growth of the live file while it is rewritten.
+    const need = dbBytes + body.length * 2;
+    fs.mkdirSync(REPLACE_DIR, { recursive: true });
+    if (freeBytes(DATA_DIR) < need) {
+      throw new ApiError(507, "INSUFFICIENT_STORAGE", `Not enough free disk for backup and replacement (need about ${need} bytes)`);
+    }
+
+    const incoming = path.join(REPLACE_DIR, "incoming.db");
+    fs.writeFileSync(incoming, body);
+    const started: ReplaceStatus = { state: "running", startedAt: new Date().toISOString(), finishedAt: null, backupPath: null, message: null, stats: null };
+    writeReplaceStatus(started);
+    res.status(202).json({ data: started });
+
+    setImmediate(() => {
+      try {
+        const backupPath = path.join(REPLACE_DIR, `backup-${Date.now()}.db`);
+        db.prepare("VACUUM INTO ?").run(backupPath);
+        const stats = replaceFromFile(db, incoming, Date.now());
+        writeReplaceStatus({ ...started, state: "done", backupPath, finishedAt: new Date().toISOString(), stats });
+      } catch (err) {
+        writeReplaceStatus({ ...started, state: "error", finishedAt: new Date().toISOString(), message: (err as Error).message });
+      } finally {
+        fs.rmSync(incoming, { force: true });
+      }
+    });
   }),
 );
 

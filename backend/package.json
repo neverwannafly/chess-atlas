@@ -9,7 +9,7 @@
     "scrape": "tsx src/scripts/scrape.ts",
     "extract": "tsx src/extraction/worker.ts",
     "chessresults": "tsx src/chessresults/main.ts",
-    "test": "tsx --test src/lib/*.test.ts src/chessresults/*.test.ts src/fide/*.test.ts",
+    "test": "tsx --test src/lib/*.test.ts src/chessresults/*.test.ts src/fide/*.test.ts src/db/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

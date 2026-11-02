@@ -11,3 +11,6 @@ dist/
 *.back
 .DS_Store
 *.log
+
+# local secrets (never commit)
+atlas.secret
